@@ -496,13 +496,27 @@ let pendingAdFile   = null;
 
 // ── Boot ─────────────────────────────────────────────────────
 async function boot() {
-  const r = await fetch(`${API}/api/session`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sessionId }) });
-  const d = await r.json();
-  sessionId = d.sessionId;
-  localStorage.setItem('pb_session', sessionId);
-  await refreshDaily();
-  loadBooks();
-  loadShows();
+  try {
+    const r = await fetch(`${API}/api/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    });
+    if (!r.ok) throw new Error('Session API returned ' + r.status);
+    const d = await r.json();
+    sessionId = d.sessionId;
+    localStorage.setItem('pb_session', sessionId);
+    await refreshDaily();
+    loadBooks();
+    loadShows();
+  } catch(err) {
+    console.error('Boot error:', err);
+    // UI still works — just show empty states and retry
+    sh('booksEmpty').style.display = 'block';
+    sh('showsEmpty').style.display = 'block';
+    sh('booksEmpty').querySelector('p').textContent = 'Could not connect to server. Please refresh the page.';
+    sh('showsEmpty').querySelector('p').textContent = 'Could not connect to server. Please refresh the page.';
+  }
 }
 
 function sh(id) { return document.getElementById(id); }
@@ -513,24 +527,41 @@ function authHeaders() { return { 'x-session-id': sessionId, 'Content-Type': 'ap
 function adminHeaders(extra={}) { return { 'x-session-id': sessionId, 'x-admin-pass': adminPass, ...extra }; }
 
 // ── Page switching ────────────────────────────────────────────
-function showPage(id) { document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); sh('page-'+id).classList.add('active'); }
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const target = document.getElementById('page-'+id);
+  if(target) target.classList.add('active');
+  else console.error('Page not found: page-'+id);
+}
 function switchMainTab(tab, btn) {
-  showPage(tab==='books'?'books':'videos');
+  const pageId = tab==='books' ? 'books' : 'videos';
+  showPage(pageId);
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('on'));
-  if(btn) btn.classList.add('on');
+  // Activate the right tab button in both topbars
+  document.querySelectorAll('.nav-tab').forEach(t=>{
+    if((tab==='books'&&t.textContent.includes('Books'))||(tab==='videos'&&t.textContent.includes('Videos'))) t.classList.add('on');
+  });
+  // Reload content when switching tabs
+  if(tab==='books') loadBooks();
+  else loadShows();
 }
 function goHome() {
   clearInterval(tickTimer); clearInterval(dayTimer); clearInterval(adTimer);
-  const vid=sh('mainVideo'); if(vid){vid.pause();vid.src='';}
+  try { const vid=sh('mainVideo'); if(vid){vid.pause();vid.src='';} } catch(e){}
   activeBook=null; activeShow=null;
-  showPage(sh('page-videos').classList.contains('active')?'videos':'books');
+  const onVideos = sh('page-videos') && sh('page-videos').classList.contains('active');
+  showPage(onVideos ? 'videos' : 'books');
   loadBooks(); loadShows();
 }
 
 // ── Daily state ───────────────────────────────────────────────
 async function refreshDaily() {
-  const r = await fetch(`${API}/api/daily`, { headers: authHeaders() });
-  daily = await r.json();
+  try {
+    if (!sessionId) return;
+    const r = await fetch(`${API}/api/daily`, { headers: authHeaders() });
+    if (!r.ok) return;
+    daily = await r.json();
+  } catch(e) { console.warn('refreshDaily failed:', e); }
 }
 function effectiveTimeLimit() { return DAILY_LIMIT+(daily?.bonus_secs||0); }
 function effectiveEpLimit() { return EP_MAX+(daily?.bonus_eps||0); }
@@ -566,21 +597,24 @@ async function loadProgress(type, contentId) {
 
 // ── BOOKS ─────────────────────────────────────────────────────
 async function loadBooks() {
-  const r = await fetch(`${API}/api/books`);
-  const books = await r.json();
-  const grid = sh('bookGrid'), empty = sh('booksEmpty');
-  if (!books.length) { grid.innerHTML=''; empty.style.display='block'; return; }
-  empty.style.display='none';
-  grid.innerHTML = books.map(b => `
-    <div class="card" onclick="openBook('${b.id}')">
-      <div class="card-thumb">
-        ${b.coverUrl?`<img src="${b.coverUrl}" alt="${b.title}">`:'📖'}
-      </div>
-      <div class="card-body">
-        <div class="card-title">${b.title}</div>
-        <div class="card-sub">${b.author||''} · ${b.total_episodes} episodes</div>
-      </div>
-    </div>`).join('');
+  try {
+    const r = await fetch(`${API}/api/books`);
+    if (!r.ok) throw new Error('Books fetch failed');
+    const books = await r.json();
+    const grid = sh('bookGrid'), empty = sh('booksEmpty');
+    if (!books.length) { grid.innerHTML=''; empty.style.display='block'; return; }
+    empty.style.display='none';
+    grid.innerHTML = books.map(b => `
+      <div class="card" onclick="openBook('${b.id}')">
+        <div class="card-thumb">
+          ${b.coverUrl?`<img src="${b.coverUrl}" alt="${b.title}">`:'📖'}
+        </div>
+        <div class="card-body">
+          <div class="card-title">${b.title}</div>
+          <div class="card-sub">${b.author||''} · ${b.total_episodes} episodes</div>
+        </div>
+      </div>`).join('');
+  } catch(e) { console.warn('loadBooks failed:', e); }
 }
 
 async function openBook(id) {
@@ -692,23 +726,26 @@ function updateBookStats() {
 
 // ── SHOWS / VIDEOS ────────────────────────────────────────────
 async function loadShows() {
-  const r = await fetch(`${API}/api/shows`);
-  const shows = await r.json();
-  const grid = sh('showGrid'), empty = sh('showsEmpty');
-  if (!shows.length) { grid.innerHTML=''; empty.style.display='block'; return; }
-  empty.style.display='none';
-  grid.innerHTML = shows.map(s => `
-    <div class="card" onclick="openShow('${s.id}')">
-      <div class="card-thumb">
-        ${s.thumbUrl?`<img src="${s.thumbUrl}" alt="${s.title}">`:'🎬'}
-        <div class="play-icon">▶</div>
-        <div class="card-ep-badge">${s.episodeCount} ep${s.episodeCount!==1?'s':''}</div>
-      </div>
-      <div class="card-body">
-        <div class="card-title">${s.title}</div>
-        <div class="card-sub">${s.creator||''}</div>
-      </div>
-    </div>`).join('');
+  try {
+    const r = await fetch(`${API}/api/shows`);
+    if (!r.ok) throw new Error('Shows fetch failed');
+    const shows = await r.json();
+    const grid = sh('showGrid'), empty = sh('showsEmpty');
+    if (!shows.length) { grid.innerHTML=''; empty.style.display='block'; return; }
+    empty.style.display='none';
+    grid.innerHTML = shows.map(s => `
+      <div class="card" onclick="openShow('${s.id}')">
+        <div class="card-thumb">
+          ${s.thumbUrl?`<img src="${s.thumbUrl}" alt="${s.title}">`:'🎬'}
+          <div class="play-icon">▶</div>
+          <div class="card-ep-badge">${s.episodeCount} ep${s.episodeCount!==1?'s':''}</div>
+        </div>
+        <div class="card-body">
+          <div class="card-title">${s.title}</div>
+          <div class="card-sub">${s.creator||''}</div>
+        </div>
+      </div>`).join('');
+  } catch(e) { console.warn('loadShows failed:', e); }
 }
 
 async function openShow(id) {
