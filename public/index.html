@@ -3,1107 +3,1008 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pagebound</title>
+<title>Pagebound — Read More, Together</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #f7f5f0; --surface: #fff; --surface-2: #f0ede7; --surface-3: #e8e4dc;
-    --accent: #e53e3e; --accent-light: #fff0f0; --accent-dark: #c53030;
-    --text: #1a1814; --text-2: #6b6760; --text-3: #a8a49e;
-    --border: rgba(0,0,0,.09); --border-strong: rgba(0,0,0,.18);
-    --success: #1a7a3c; --success-bg: #e8faf0; --success-border: #7ecfa0;
-    --warn: #8a5500; --warn-bg: #fff4e0;
-    --danger: #c0392b; --danger-bg: #fff0ee;
-    --radius: 10px; --serif: Georgia, 'Times New Roman', serif;
-    --sans: system-ui, -apple-system, sans-serif;
-  }
-  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
-  .page { display: none; max-width: 700px; margin: 0 auto; padding: 16px 16px 40px; }
-  .page.active { display: block; }
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sans:'Inter',system-ui,sans-serif;
+  --serif:'Fraunces',Georgia,serif;
+  --radius:10px;
+  --text:#1a1814;--text-2:#6b6760;--text-3:#a8a49e;
+  --accent:#2c5ee8;--accent-l:#eef3ff;--accent-d:#1a3fa0;
+  --success:#1a7a3c;--success-l:#e8faf0;--success-b:#7ecfa0;
+  --warn:#8a5500;--warn-l:#fff4e0;
+  --danger:#c0392b;--danger-l:#fff0ee;--danger-b:#e74c3c;
+  --s1:#f0ede7;--s2:#fff;
+  --border:rgba(0,0,0,.09);--border-strong:rgba(0,0,0,.18);
+}
+body{font-family:var(--sans);background:#f7f5f0;color:var(--text);min-height:100vh}
+.shell{max-width:700px;margin:0 auto;padding:16px 16px 80px}
 
-  /* NAV */
-  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
-  .brand { font-size: 18px; font-weight: 600; cursor: pointer; letter-spacing: -.4px; }
-  .brand em { color: var(--accent); font-style: normal; }
-  .nav-tabs { display: flex; gap: 4px; background: var(--surface-2); border-radius: 9px; padding: 3px; }
-  .nav-tab { padding: 6px 14px; border-radius: 7px; font-size: 13px; cursor: pointer; border: none; background: transparent; color: var(--text-2); font-family: var(--sans); transition: all .15s; }
-  .nav-tab.on { background: var(--surface); color: var(--text); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  .topbtn { padding: 6px 13px; border-radius: var(--radius); font-size: 12px; font-weight: 500; cursor: pointer; border: .5px solid var(--border-strong); background: transparent; color: var(--text); display: flex; align-items: center; gap: 5px; font-family: var(--sans); }
-  .topbtn:hover { background: var(--surface-2); }
-  .topbtn.danger { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:0.5px solid var(--border);margin-bottom:24px;gap:12px}
+.brand{font-family:var(--serif);font-size:20px;font-weight:400;cursor:pointer;letter-spacing:-.3px}
+.brand em{color:var(--accent);font-style:italic}
+.topbtn{padding:6px 13px;border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--sans);border:.5px solid var(--border-strong);background:transparent;color:var(--text);display:flex;align-items:center;gap:5px;transition:all .12s}
+.topbtn:hover{background:var(--s1)}
+.topbtn.danger{background:var(--danger-l);border-color:var(--danger-b);color:var(--danger)}
 
-  /* GRIDS */
-  .section-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 12px; }
-  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-bottom: 24px; }
-  .card { background: var(--surface); border: .5px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; transition: all .15s; }
-  .card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
-  .card-thumb { height: 110px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 36px; position: relative; overflow: hidden; }
-  .card-thumb img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
-  .card-thumb .play-icon { position: absolute; inset: 0; background: rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; font-size: 28px; color: #fff; opacity: 0; transition: opacity .15s; z-index: 2; }
-  .card:hover .play-icon { opacity: 1; }
-  .card-ep-badge { position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,.7); color: #fff; font-size: 10px; font-weight: 500; padding: 2px 6px; border-radius: 4px; z-index: 3; }
-  .card-body { padding: 10px 12px 12px; }
-  .card-title { font-size: 13px; font-weight: 500; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .card-sub { font-size: 11px; color: var(--text-3); }
-  .card-progress { height: 3px; background: var(--surface-2); border-radius: 2px; margin-top: 8px; overflow: hidden; }
-  .card-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; }
-  .continue-pill { font-size: 10px; font-weight: 500; background: var(--accent-light); color: var(--accent); border-radius: 4px; padding: 2px 6px; margin-top: 5px; display: inline-block; }
-  .empty-state { text-align: center; padding: 40px 20px; background: var(--surface); border-radius: 12px; border: 1.5px dashed var(--border-strong); }
-  .empty-state p { font-size: 14px; color: var(--text-2); margin-top: 10px; line-height: 1.6; }
+/* EMPTY STATE */
+.empty-hero{padding:60px 20px 48px;text-align:center}
+.empty-hero-eyebrow{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:20px}
+.empty-hero-title{font-family:var(--serif);font-size:clamp(32px,6vw,48px);font-weight:300;line-height:1.2;color:var(--text);margin-bottom:16px}
+.empty-hero-title em{font-style:italic;color:var(--accent)}
+.empty-hero-sub{font-size:16px;color:var(--text-2);line-height:1.75;max-width:420px;margin:0 auto 32px}
+.empty-hero-pills{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:40px}
+.pill{display:flex;align-items:center;gap:6px;background:var(--s2);border:.5px solid var(--border-strong);border-radius:100px;padding:7px 16px;font-size:13px;color:var(--text-2)}
+.pill i{color:var(--accent);font-size:14px}
+.empty-divider{height:.5px;background:var(--border);margin:0 auto 40px;max-width:80px}
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:48px}
+.feature{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:20px;text-align:left}
+.feature-icon{font-size:24px;margin-bottom:10px}
+.feature-title{font-size:13px;font-weight:600;margin-bottom:5px}
+.feature-desc{font-size:12px;color:var(--text-2);line-height:1.6}
+.empty-cta{font-family:var(--serif);font-size:18px;font-weight:300;font-style:italic;color:var(--text-3);text-align:center}
 
-  /* READER */
-  .back-btn { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); cursor: pointer; margin-bottom: 16px; background: none; border: none; font-family: var(--sans); padding: 0; }
-  .back-btn:hover { color: var(--text); }
-  .ep-legend { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
-  .leg { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); }
-  .leg-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
-  .ep-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 14px; scrollbar-width: thin; }
-  .ep-pill { flex-shrink: 0; width: 38px; height: 38px; border-radius: 8px; border: .5px solid var(--border); background: var(--surface); font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-2); transition: all .15s; flex-direction: column; gap: 1px; }
-  .ep-pill:hover:not(.lk):not(.fut) { border-color: var(--accent); color: var(--accent); }
-  .ep-pill.done { background: var(--success-bg); border-color: var(--success-border); color: var(--success); }
-  .ep-pill.cur { background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 600; }
-  .ep-pill.lk, .ep-pill.fut { opacity: .35; cursor: default; }
-  .ep-pill .lico { font-size: 9px; }
+/* LIBRARY */
+.section-label{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px}
+.book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-bottom:24px}
+.book-card{background:var(--s2);border:.5px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:all .15s}
+.book-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 16px rgba(44,94,232,.1)}
+.book-cover{height:160px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:var(--s1)}
+.book-cover img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.book-cover-placeholder{font-size:42px;z-index:1}
+.book-card-body{padding:10px 12px 12px}
+.book-card-title{font-size:13px;font-weight:500;line-height:1.4;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.book-card-author{font-size:11px;color:var(--text-3)}
+.book-card-meta{display:flex;align-items:center;justify-content:space-between;margin-top:7px;flex-wrap:wrap;gap:4px}
+.book-card-eps{font-size:10px;color:var(--text-2);background:var(--s1);border-radius:4px;padding:2px 6px}
+.continue-badge{font-size:10px;font-weight:500;background:var(--success-l);color:var(--success);border-radius:4px;padding:2px 6px}
+.book-card-progress{height:3px;background:var(--s1);border-radius:2px;margin-top:8px;overflow:hidden}
+.book-card-progress-fill{height:100%;background:var(--accent);border-radius:2px}
 
-  /* DAILY STATS */
-  .daily-stats { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-  .stat-chip { flex: 1; min-width: 120px; background: var(--surface); border: .5px solid var(--border); border-radius: var(--radius); padding: 9px 12px; }
-  .stat-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
-  .stat-val { font-size: 14px; font-weight: 500; }
-  .stat-bar { height: 4px; background: var(--surface-2); border-radius: 2px; margin-top: 6px; overflow: hidden; }
-  .stat-fill { height: 100%; border-radius: 2px; transition: width .4s; }
-  .stat-fill.time { background: var(--success); }
-  .stat-fill.time.warn { background: var(--warn); }
-  .stat-fill.time.full { background: var(--danger); }
-  .stat-fill.eps { background: var(--accent); }
+/* READER */
+.back-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);cursor:pointer;margin-bottom:16px;background:none;border:none;font-family:var(--sans);padding:0}
+.back-btn:hover{color:var(--text)}
+.ep-legend{display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2)}
+.leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.ep-strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;scrollbar-width:thin}
+.ep-pill{flex-shrink:0;width:38px;height:38px;border-radius:8px;border:.5px solid var(--border);background:var(--s1);font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-2);transition:all .15s;position:relative;flex-direction:column;gap:1px}
+.ep-pill:hover:not(.lk):not(.future){border-color:var(--accent);color:var(--accent)}
+.ep-pill.done{background:var(--success-l);border-color:var(--success-b);color:var(--success)}
+.ep-pill.cur{background:var(--accent-l);border-color:var(--accent);color:var(--accent);font-weight:500}
+.ep-pill.lk{opacity:.5;cursor:default}
+.ep-pill.future{opacity:.25;cursor:default}
+.ep-pill .lock-ico{font-size:9px}
 
-  /* AD BREAK BAR */
-  .ad-break-bar { background: var(--surface); border: .5px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; }
-  .ad-break-bar-label { font-size: 12px; color: var(--text-2); margin-bottom: 5px; display: flex; justify-content: space-between; }
-  .ad-break-bar-label span { font-weight: 500; color: var(--text); }
-  .ad-rail { height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden; position: relative; }
-  .ad-fill { height: 100%; border-radius: 4px; background: var(--success); transition: width 1s linear; }
-  .ad-rail-wrap { position: relative; }
-  .ad-marker { position: absolute; top: -2px; width: 2px; height: 10px; background: var(--accent); border-radius: 1px; transform: translateX(-50%); }
-  .ad-marker.hit { background: var(--text-3); }
-  .ad-ticks { display: flex; gap: 12px; margin-top: 5px; }
-  .ad-ticks span { font-size: 10px; color: var(--text-3); }
+.daily-stats{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.stat-chip{flex:1;min-width:120px;background:var(--s2);border:.5px solid var(--border);border-radius:var(--radius);padding:9px 12px}
+.stat-chip-label{font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.stat-chip-val{font-size:14px;font-weight:500}
+.stat-chip-bar{height:4px;background:var(--s1);border-radius:2px;margin-top:6px;overflow:hidden}
+.stat-chip-fill{height:100%;border-radius:2px;transition:width .4s}
+.stat-chip-fill.time{background:var(--success)}
+.stat-chip-fill.time.warn{background:var(--warn)}
+.stat-chip-fill.time.full{background:var(--danger)}
+.stat-chip-fill.eps{background:var(--accent)}
 
-  /* READER BODY */
-  .reader-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 10px; }
-  .reader-title { font-size: 14px; font-weight: 500; flex: 1; }
-  .timer-chip { font-size: 12px; padding: 4px 10px; border-radius: 6px; font-weight: 500; white-space: nowrap; }
-  .timer-chip.ok { background: var(--success-bg); color: var(--success); }
-  .timer-chip.warn { background: var(--warn-bg); color: var(--warn); }
-  .timer-chip.lk { background: var(--danger-bg); color: var(--danger); }
-  .progress-rail { height: 2px; background: var(--surface-2); border-radius: 2px; margin-bottom: 20px; }
-  .progress-fill { height: 2px; background: var(--accent); border-radius: 2px; transition: width .5s; }
-  .reader-body { font-family: var(--serif); font-size: 17px; line-height: 1.85; color: var(--text); }
-  .reader-body p { margin-bottom: 1.4em; }
-  .reader-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 28px; padding-top: 16px; border-top: .5px solid var(--border); }
-  .reader-nav span { font-size: 12px; color: var(--text-3); }
-  .navbtn { padding: 7px 16px; border-radius: var(--radius); font-size: 13px; font-family: var(--sans); cursor: pointer; }
-  .navbtn.def { border: .5px solid var(--border-strong); background: transparent; color: var(--text); }
-  .navbtn.acc { border: .5px solid var(--accent); background: var(--accent-light); color: var(--accent); font-weight: 500; }
-  .navbtn:disabled { opacity: .35; cursor: default; }
+.session-bar{background:var(--s2);border:.5px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px}
+.session-bar-label{font-size:12px;color:var(--text-2);margin-bottom:5px;display:flex;justify-content:space-between}
+.session-bar-label span{font-weight:500;color:var(--text)}
+.session-rail{height:6px;background:var(--s1);border-radius:4px;overflow:hidden}
+.session-rail-wrap{position:relative}
+.session-fill{height:100%;border-radius:4px;transition:width 1s linear}
+.session-fill.ok{background:var(--success)}
+.session-fill.warn{background:var(--warn)}
+.session-fill.full{background:var(--danger)}
+.ad-marker{position:absolute;top:-2px;width:2px;height:10px;background:var(--accent);border-radius:1px;transform:translateX(-50%)}
+.ad-marker.hit{background:var(--text-3)}
+.ad-markers-label{display:flex;gap:12px;margin-top:5px}
+.ad-markers-label span{font-size:10px;color:var(--text-3)}
 
-  /* VIDEO PLAYER */
-  .player-wrap { background: #000; border-radius: 12px; overflow: hidden; position: relative; width: 100%; aspect-ratio: 16/9; margin-bottom: 14px; }
-  .main-video { width: 100%; height: 100%; display: block; object-fit: contain; }
-  .ad-overlay { position: absolute; inset: 0; background: #000; z-index: 10; display: none; flex-direction: column; }
-  .ad-overlay.show { display: flex; }
-  .ad-media-wrap { flex: 1; display: flex; align-items: center; justify-content: center; background: #000; min-height: 0; overflow: hidden; }
-  .ad-media-wrap video, .ad-media-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-  .ad-placeholder-big { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #111; color: rgba(255,255,255,.4); font-size: 13px; }
-  .ad-placeholder-big .icon { font-size: 36px; }
-  .ad-bar { background: rgba(0,0,0,.85); padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0; }
-  .ad-bar-label { font-size: 10px; color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .07em; }
-  .ad-bar-name { font-size: 12px; color: #fff; font-weight: 500; }
-  .ad-bar-timer { font-size: 12px; color: rgba(255,255,255,.8); font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 6px; }
-  .ad-ring-mini { width: 18px; height: 18px; flex-shrink: 0; }
-  .ad-ring-mini circle { transform-origin: 50% 50%; }
+.reader-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}
+.reader-title{font-family:var(--serif);font-size:16px;font-weight:400;flex:1}
+.timer-chip{font-size:12px;padding:4px 10px;border-radius:6px;font-weight:500;white-space:nowrap}
+.timer-chip.ok{background:var(--success-l);color:var(--success)}
+.timer-chip.warn{background:var(--warn-l);color:var(--warn)}
+.timer-chip.lk{background:var(--danger-l);color:var(--danger)}
+.progress-rail{height:2px;background:var(--s1);border-radius:2px;margin-bottom:24px}
+.progress-fill{height:2px;background:var(--accent);border-radius:2px;transition:width .5s}
+.reader-body{font-family:var(--serif);font-size:17px;line-height:1.9;color:var(--text)}
+.reader-body p{margin-bottom:1.4em}
+.reader-nav{display:flex;align-items:center;justify-content:space-between;margin-top:32px;padding-top:18px;border-top:.5px solid var(--border)}
+.reader-nav span{font-size:12px;color:var(--text-3)}
+.navbtn{padding:7px 16px;border-radius:var(--radius);font-size:13px;font-family:var(--sans);cursor:pointer}
+.navbtn.def{border:.5px solid var(--border-strong);background:transparent;color:var(--text)}
+.navbtn.acc{border:.5px solid var(--accent);background:var(--accent-l);color:var(--accent);font-weight:500}
+.navbtn:disabled{opacity:.35;cursor:default}
 
-  /* DAY DONE */
-  .daydone-card { background: var(--surface); border: .5px solid var(--border); border-radius: 12px; padding: 28px 24px; text-align: center; margin-top: 8px; }
-  .daydone-card h3 { font-size: 17px; font-weight: 500; margin: 10px 0 8px; }
-  .daydone-card p { font-size: 13px; color: var(--text-2); line-height: 1.65; margin-bottom: 6px; }
-  .daydone-timer { font-size: 30px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--accent); margin: 10px 0 18px; }
-  .earn-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-  .earn-row { display: flex; align-items: center; justify-content: space-between; background: var(--surface-2); border-radius: var(--radius); padding: 10px 14px; gap: 12px; }
-  .earn-row-info p { font-size: 13px; font-weight: 500; text-align: left; }
-  .earn-row-info span { font-size: 11px; color: var(--text-2); display: block; text-align: left; }
-  .ubtn { padding: 7px 14px; border-radius: var(--radius); font-size: 12px; cursor: pointer; font-family: var(--sans); font-weight: 500; white-space: nowrap; }
-  .ubtn.acc { border: .5px solid var(--accent); background: var(--accent-light); color: var(--accent); }
-  .ubtn.def { border: .5px solid var(--border-strong); background: transparent; color: var(--text); }
-  .ubtn.suc { border: .5px solid var(--success-border); background: var(--success-bg); color: var(--success); }
+/* AD BREAK */
+.ad-backdrop{background:rgba(0,0,0,.52);border-radius:12px;padding:20px;display:flex;align-items:center;justify-content:center;min-height:280px;margin-bottom:16px}
+.ad-card-inner{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:0;max-width:380px;width:100%;text-align:center;overflow:hidden}
+.ad-top-bar{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:.5px solid var(--border)}
+.ad-eyebrow{font-size:10px;font-weight:500;letter-spacing:.08em;color:var(--text-3);text-transform:uppercase}
+.ad-context{font-size:11px;color:var(--accent);background:var(--accent-l);border-radius:5px;padding:2px 8px;font-weight:500}
+.ad-video-wrap{position:relative;width:100%;background:#000;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
+.ad-video-wrap video,.ad-video-wrap img{width:100%;height:100%;object-fit:contain;display:block}
+.ad-placeholder{width:100%;aspect-ratio:16/9;background:var(--s1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-3)}
+.ad-placeholder i{font-size:32px}
+.ad-countdown-overlay{position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.65);color:#fff;border-radius:20px;padding:4px 10px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px}
+.ad-countdown-ring{width:18px;height:18px;flex-shrink:0}
+.ad-info{padding:14px 16px;text-align:left}
+.ad-name{font-size:14px;font-weight:500;margin-bottom:3px}
+.ad-desc{font-size:12px;color:var(--text-2);line-height:1.5}
 
-  /* AD BREAK MODAL (for timed breaks during reading) */
-  .ad-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; display: none; align-items: center; justify-content: center; }
-  .ad-modal-backdrop.show { display: flex; }
-  .ad-modal { background: var(--surface); border-radius: 16px; width: 90%; max-width: 420px; overflow: hidden; }
-  .ad-modal-top { padding: 10px 16px; border-bottom: .5px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-  .ad-modal-label { font-size: 10px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .07em; }
-  .ad-modal-context { font-size: 11px; font-weight: 500; color: var(--accent); background: var(--accent-light); border-radius: 4px; padding: 2px 8px; }
-  .ad-modal-media { width: 100%; aspect-ratio: 16/9; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-  .ad-modal-media video, .ad-modal-media img { width: 100%; height: 100%; object-fit: contain; }
-  .ad-modal-ph { font-size: 13px; color: rgba(255,255,255,.4); display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .ad-modal-ph .icon { font-size: 32px; }
-  .ad-modal-info { padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
-  .ad-modal-text { flex: 1; }
-  .ad-modal-name { font-size: 14px; font-weight: 500; }
-  .ad-modal-ring { width: 48px; height: 48px; flex-shrink: 0; position: relative; }
-  .ad-modal-ring svg { transform: rotate(-90deg); }
-  .ad-modal-count { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 13px; font-weight: 500; }
+/* DAY DONE */
+.daydone-card{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:28px 24px;text-align:center}
+.daydone-card h3{font-family:var(--serif);font-size:20px;font-weight:400;margin:10px 0 8px}
+.daydone-card p{font-size:13px;color:var(--text-2);line-height:1.65;margin-bottom:6px}
+.daydone-timer{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--accent);margin:10px 0 18px;font-family:var(--sans)}
+.earn-grid{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.earn-row{display:flex;align-items:center;justify-content:space-between;background:var(--s1);border-radius:var(--radius);padding:10px 14px;gap:12px}
+.earn-row-info p{font-size:13px;font-weight:500;text-align:left}
+.earn-row-info span{font-size:11px;color:var(--text-2);display:block;text-align:left}
+.ubtn{padding:7px 14px;border-radius:var(--radius);font-size:12px;cursor:pointer;font-family:var(--sans);font-weight:500;white-space:nowrap}
+.ubtn.acc{border:.5px solid var(--accent);background:var(--accent-l);color:var(--accent)}
+.ubtn.def{border:.5px solid var(--border-strong);background:transparent;color:var(--text)}
+.ubtn.success{border:.5px solid var(--success-b);background:var(--success-l);color:var(--success)}
 
-  /* ADMIN */
-  .admin-login-card { background: var(--surface); border: .5px solid var(--border); border-radius: 12px; padding: 28px 24px; max-width: 320px; margin: 40px auto; text-align: center; }
-  .admin-login-card h3 { font-size: 16px; font-weight: 500; margin-bottom: 8px; }
-  .admin-login-card p { font-size: 13px; color: var(--text-2); margin-bottom: 18px; }
-  .admin-input { width: 100%; padding: 10px 12px; border-radius: var(--radius); border: .5px solid var(--border-strong); font-size: 14px; background: var(--surface-2); color: var(--text); font-family: var(--sans); margin-bottom: 10px; text-align: center; letter-spacing: 3px; }
-  .admin-login-btn { width: 100%; padding: 10px; border-radius: var(--radius); font-size: 13px; font-weight: 500; border: .5px solid var(--accent); background: var(--accent-light); color: var(--accent); cursor: pointer; font-family: var(--sans); }
-  .login-err { font-size: 12px; color: var(--danger); margin-top: 8px; display: none; }
+/* ADMIN */
+.admin-login-card{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:32px 28px;max-width:340px;margin:40px auto;text-align:center}
+.admin-login-card h3{font-family:var(--serif);font-size:20px;font-weight:400;margin-bottom:8px}
+.admin-login-card p{font-size:13px;color:var(--text-2);margin-bottom:20px}
+.admin-input{width:100%;padding:10px 12px;border-radius:var(--radius);border:.5px solid var(--border-strong);font-size:14px;background:var(--s1);color:var(--text);font-family:var(--sans);margin-bottom:10px;text-align:center;letter-spacing:3px}
+.admin-login-btn{width:100%;padding:10px;border-radius:var(--radius);font-size:13px;font-weight:500;border:.5px solid var(--accent);background:var(--accent-l);color:var(--accent);cursor:pointer;font-family:var(--sans)}
+.login-err{font-size:12px;color:var(--danger);margin-top:8px;display:none}
 
-  .admin-wrap { display: flex; flex-direction: column; gap: 16px; }
-  .admin-section { background: var(--surface); border: .5px solid var(--border-strong); border-radius: 12px; padding: 18px; }
-  .admin-section h3 { font-size: 14px; font-weight: 500; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
-  .badge { font-size: 11px; background: var(--accent-light); color: var(--accent); border-radius: 5px; padding: 2px 8px; font-weight: 500; }
-  .add-label { font-size: 12px; font-weight: 500; color: var(--text-2); display: block; margin-bottom: 5px; }
-  .field { width: 100%; padding: 8px 10px; border-radius: var(--radius); border: .5px solid var(--border-strong); font-size: 13px; background: var(--surface-2); color: var(--text); font-family: var(--sans); margin-bottom: 10px; }
-  .field:focus { outline: none; border-color: var(--accent); }
-  .file-row { border: .5px solid var(--border); border-radius: var(--radius); padding: 10px 12px; display: flex; align-items: center; gap: 10px; margin-bottom: 10px; background: var(--surface-2); cursor: pointer; }
-  .file-row.sel { border-color: var(--success-border); background: var(--success-bg); }
-  .file-row-info { flex: 1; min-width: 0; }
-  .file-row-info p { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .file-row-info span { font-size: 11px; color: var(--text-3); }
-  .file-row.sel .file-row-info span { color: var(--success); }
-  .file-row-btn { font-size: 12px; padding: 5px 12px; border-radius: 6px; border: .5px solid var(--border-strong); background: var(--surface); cursor: pointer; font-family: var(--sans); white-space: nowrap; flex-shrink: 0; color: var(--text); }
-  .big-btn { width: 100%; padding: 11px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; font-family: var(--sans); border: none; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; }
-  .big-btn.red { background: var(--accent); }
-  .big-btn.grn { background: var(--success); }
-  .big-btn:hover { opacity: .88; }
-  .big-btn:disabled { opacity: .38; cursor: not-allowed; }
+.admin-tabs{display:flex;gap:2px;background:var(--s1);border-radius:var(--radius);padding:3px;margin-bottom:20px}
+.admin-tab{flex:1;padding:7px;font-size:13px;font-weight:500;border-radius:7px;cursor:pointer;border:none;background:transparent;color:var(--text-2);font-family:var(--sans);transition:all .15s;text-align:center}
+.admin-tab.on{background:var(--s2);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 
-  .list-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: .5px solid var(--border); }
-  .list-row:last-child { border-bottom: none; }
-  .list-num { width: 24px; height: 24px; border-radius: 6px; background: var(--accent-light); color: var(--accent); font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .list-info { flex: 1; min-width: 0; }
-  .list-info p { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .list-info span { font-size: 11px; color: var(--text-3); }
-  .del-btn { font-size: 11px; color: var(--danger); background: none; border: none; cursor: pointer; padding: 4px 8px; border-radius: 4px; font-family: var(--sans); }
-  .del-btn:hover { background: var(--danger-bg); }
+.admin-section{background:var(--s2);border:.5px solid var(--border-strong);border-radius:12px;padding:18px;margin-bottom:16px}
+.admin-section-title{font-size:14px;font-weight:500;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.badge{font-size:11px;background:var(--accent-l);color:var(--accent);border-radius:5px;padding:2px 8px;font-weight:500}
+.badge.warn{background:var(--warn-l);color:var(--warn)}
+.add-label{font-size:12px;font-weight:500;color:var(--text-2);display:block;margin-bottom:5px}
+.field{width:100%;padding:8px 10px;border-radius:var(--radius);border:.5px solid var(--border-strong);font-size:13px;background:var(--s2);color:var(--text);font-family:var(--sans);margin-bottom:10px}
+.field:focus{outline:none;border-color:var(--accent)}
+.cover-row{display:flex;gap:14px;align-items:flex-start;margin-bottom:12px}
+.cover-box{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px}
+.cover-thumb{width:76px;height:100px;border-radius:8px;object-fit:cover;display:block;border:.5px solid var(--border)}
+.cover-empty{width:76px;height:100px;border-radius:8px;border:1.5px dashed var(--border-strong);display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--s1);transition:all .14s;flex-direction:column;gap:4px;font-size:10px;color:var(--text-3);text-align:center;padding:4px}
+.cover-empty:hover{border-color:var(--accent);background:var(--accent-l)}
+.cover-empty i{font-size:20px}
+.cover-change{font-size:10px;color:var(--accent);cursor:pointer;text-align:center}
+.file-pick-row{border:.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;display:flex;align-items:center;gap:10px;margin-bottom:10px;background:var(--s1);cursor:pointer}
+.file-pick-row.selected{border-color:var(--success-b);background:var(--success-l)}
+.file-pick-icon{font-size:18px;color:var(--text-3);flex-shrink:0}
+.file-pick-row.selected .file-pick-icon{color:var(--success)}
+.file-pick-info{flex:1;min-width:0}
+.file-pick-info p{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-pick-info span{font-size:11px;color:var(--text-3)}
+.file-pick-row.selected .file-pick-info span{color:var(--success)}
+.file-pick-btn{font-size:12px;font-weight:500;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:var(--sans);border:.5px solid var(--border-strong);background:transparent;color:var(--text);white-space:nowrap;flex-shrink:0}
+.big-btn{width:100%;padding:11px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;font-family:var(--sans);border:none;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s;margin-top:4px;background:var(--accent)}
+.big-btn.grn{background:var(--success)}
+.big-btn:hover{opacity:.88}
+.big-btn:disabled{opacity:.35;cursor:not-allowed}
+.list-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:.5px solid var(--border)}
+.list-row:last-child{border-bottom:none}
+.list-num{width:24px;height:24px;border-radius:6px;background:var(--accent-l);color:var(--accent);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.list-info{flex:1;min-width:0}
+.list-info p{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-info span{font-size:11px;color:var(--text-3)}
+.del-btn{font-size:11px;color:var(--danger);background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:4px;font-family:var(--sans)}
+.del-btn:hover{background:var(--danger-l)}
+.size-warn{font-size:11px;color:var(--warn);background:var(--warn-l);border-radius:6px;padding:6px 10px;margin-bottom:10px;display:none;line-height:1.5}
+.size-warn.show{display:block}
 
-  /* PROG */
-  .prog-bar-outer { height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden; margin: 6px 0 10px; display: none; }
-  .prog-bar-outer.show { display: block; }
-  .prog-bar-inner { height: 100%; background: var(--accent); width: 0; border-radius: 2px; transition: width .3s; }
+/* ANALYTICS */
+.analytics-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+.stat-card{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:16px}
+.stat-card-val{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;margin-bottom:3px}
+.stat-card-label{font-size:11px;color:var(--text-3);font-weight:500}
+.stat-card-sub{font-size:11px;color:var(--text-2);margin-top:4px}
+.chart-wrap{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.chart-title{font-size:13px;font-weight:500;margin-bottom:14px;color:var(--text)}
+.bar-chart{display:flex;align-items:flex-end;gap:4px;height:80px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}
+.bar{width:100%;background:var(--accent-l);border-radius:4px 4px 0 0;transition:height .5s;min-height:2px;position:relative}
+.bar.accent{background:var(--accent)}
+.bar-label{font-size:9px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28px;text-align:center}
+.popular-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:.5px solid var(--border)}
+.popular-row:last-child{border-bottom:none}
+.popular-rank{width:20px;text-align:center;font-size:12px;font-weight:600;color:var(--text-3);flex-shrink:0}
+.popular-info{flex:1;min-width:0}
+.popular-info p{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.popular-info span{font-size:11px;color:var(--text-3)}
+.popular-stat{font-size:12px;font-weight:500;color:var(--accent);white-space:nowrap}
+.sessions-table{width:100%;border-collapse:collapse;font-size:12px}
+.sessions-table th{text-align:left;padding:6px 8px;color:var(--text-3);font-weight:500;border-bottom:.5px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.sessions-table td{padding:7px 8px;border-bottom:.5px solid var(--border);color:var(--text-2)}
+.sessions-table tr:last-child td{border-bottom:none}
+.online-dot{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;margin-right:4px}
 
-  .size-warn { font-size: 11px; color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 6px 10px; margin-bottom: 10px; display: none; }
-  .size-warn.show { display: block; }
-
-  .cover-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
-  .thumb-box { flex-shrink: 0; }
-  .thumb-empty { width: 80px; height: 54px; border-radius: 7px; border: 1.5px dashed var(--border-strong); display: flex; align-items: center; justify-content: center; cursor: pointer; background: var(--surface-2); font-size: 20px; color: var(--text-3); transition: all .14s; }
-  .thumb-empty:hover { border-color: var(--accent); background: var(--accent-light); }
-  .thumb-preview { width: 80px; height: 54px; border-radius: 7px; object-fit: cover; border: .5px solid var(--border); display: none; }
-  .thumb-change { font-size: 10px; color: var(--accent); cursor: pointer; text-align: center; margin-top: 4px; display: none; }
-
-  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--text); color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: all .2s; pointer-events: none; z-index: 9999; white-space: nowrap; }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+.prog-wrap{margin-bottom:16px;display:none}
+.prog-wrap.on{display:block}
+.prog-wrap p{font-size:13px;color:var(--text-2);margin-bottom:6px}
+.prog-bar-outer{height:5px;background:var(--s1);border-radius:3px;overflow:hidden}
+.prog-bar-inner{height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--text);color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:all .2s;pointer-events:none;z-index:9999;white-space:nowrap}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
+<div class="shell">
 
-<!-- BOOK TAB -->
-<div class="page active" id="page-books">
+  <!-- TOPBAR -->
   <div class="topbar">
-    <div class="brand" onclick="switchMainTab('books')">Page<em>bound</em></div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div class="nav-tabs">
-        <button class="nav-tab on" onclick="switchMainTab('books',this)">📚 Books</button>
-        <button class="nav-tab" onclick="switchMainTab('videos',this)">🎬 Videos</button>
+    <div class="brand" onclick="goHome()">Page<em>bound</em></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div class="prog-wrap" id="progWrap" style="margin:0;display:none">
+        <div class="prog-bar-outer" style="width:120px"><div class="prog-bar-inner" id="progBar" style="width:0%"></div></div>
       </div>
-      <button class="topbtn" onclick="openAdmin()">🛡 Admin</button>
+      <button class="topbtn" id="adminToggleBtn" onclick="toggleAdmin()"><i class="ti ti-shield" aria-hidden="true"></i> Admin</button>
     </div>
   </div>
-  <div class="section-label">Library</div>
-  <div class="card-grid" id="bookGrid"></div>
-  <div id="booksEmpty" class="empty-state" style="display:none"><p>No books yet.<br>An admin can upload books from the Admin panel.</p></div>
-</div>
 
-<!-- VIDEO TAB -->
-<div class="page" id="page-videos">
-  <div class="topbar">
-    <div class="brand" onclick="switchMainTab('videos')">Video<em>bound</em></div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div class="nav-tabs">
-        <button class="nav-tab" onclick="switchMainTab('books',this)">📚 Books</button>
-        <button class="nav-tab on" onclick="switchMainTab('videos',this)">🎬 Videos</button>
+  <!-- HOME -->
+  <div id="pageHome">
+
+    <!-- Empty state — shown when no books -->
+    <div id="emptyHero" class="empty-hero" style="display:none">
+      <div class="empty-hero-eyebrow">📚 Welcome to Pagebound</div>
+      <h1 class="empty-hero-title">Reading is better<br>when it feels like a <em>treat</em></h1>
+      <p class="empty-hero-sub">Short daily episodes. Real books. Zero overwhelm. We break every book into bite-sized chapters so you actually finish what you start.</p>
+      <div class="empty-hero-pills">
+        <div class="pill"><i class="ti ti-clock" aria-hidden="true"></i> 6 episodes a day</div>
+        <div class="pill"><i class="ti ti-flame" aria-hidden="true"></i> Daily reading streaks</div>
+        <div class="pill"><i class="ti ti-lock-open" aria-hidden="true"></i> Earn more time</div>
+        <div class="pill"><i class="ti ti-device-mobile" aria-hidden="true"></i> Read anywhere</div>
       </div>
-      <button class="topbtn" onclick="openAdmin()">🛡 Admin</button>
-    </div>
-  </div>
-  <div class="section-label">Shows</div>
-  <div class="card-grid" id="showGrid"></div>
-  <div id="showsEmpty" class="empty-state" style="display:none"><p>No shows yet.<br>An admin can upload shows from the Admin panel.</p></div>
-</div>
-
-<!-- BOOK READER -->
-<div class="page" id="page-reader">
-  <div class="topbar">
-    <button class="back-btn" onclick="goHome()">← Back</button>
-    <div class="timer-chip ok" id="readerTimerChip">⏱ 60:00 left</div>
-  </div>
-
-  <div class="ep-legend">
-    <div class="leg"><div class="leg-dot" style="background:var(--success-bg);border:.5px solid var(--success-border)"></div>Done</div>
-    <div class="leg"><div class="leg-dot" style="background:var(--accent-light);border:.5px solid var(--accent)"></div>Reading</div>
-    <div class="leg"><div class="leg-dot" style="background:var(--surface);border:.5px solid var(--border-strong);opacity:.5"></div>Locked</div>
-    <div class="leg"><div class="leg-dot" style="background:var(--surface);border:.5px solid var(--border);opacity:.25"></div>Not yet</div>
-  </div>
-  <div class="ep-strip" id="bookEpStrip"></div>
-
-  <div class="daily-stats">
-    <div class="stat-chip"><div class="stat-label">Reading time today</div><div class="stat-val" id="rStatTime">0 / 60 min</div><div class="stat-bar"><div class="stat-fill time" id="rStatTimeFill" style="width:0%"></div></div></div>
-    <div class="stat-chip"><div class="stat-label">Episodes today</div><div class="stat-val" id="rStatEps">0 / 6</div><div class="stat-bar"><div class="stat-fill eps" id="rStatEpsFill" style="width:0%"></div></div></div>
-  </div>
-
-  <div class="ad-break-bar">
-    <div class="ad-break-bar-label"><span>Ad break schedule</span><span id="rAdTime">0 / 60 min</span></div>
-    <div class="ad-rail-wrap">
-      <div class="ad-rail"><div class="ad-fill" id="rAdFill" style="width:0%"></div></div>
-      <div class="ad-marker" id="rm10" style="left:16.6%"></div>
-      <div class="ad-marker" id="rm30" style="left:50%"></div>
-      <div class="ad-marker" id="rm60" style="left:99%"></div>
-    </div>
-    <div class="ad-ticks"><span>🎬 10 min</span><span>🎬 30 min</span><span>🎬 60 min</span></div>
-  </div>
-
-  <div id="readerDayDone" style="display:none"><div class="daydone-card" id="readerDaydoneCard"></div></div>
-  <div id="readerMain">
-    <div class="reader-header"><div class="reader-title" id="readerTitle">Episode 1</div></div>
-    <div class="progress-rail"><div class="progress-fill" id="readerProgress" style="width:0%"></div></div>
-    <div class="reader-body" id="readerBody"></div>
-    <div class="reader-nav">
-      <button class="navbtn def" id="rPrevBtn" onclick="readerPrev()">← Previous</button>
-      <span id="rEpCounter">1 / 1</span>
-      <button class="navbtn acc" id="rNextBtn" onclick="readerNext()">Next episode →</button>
-    </div>
-  </div>
-</div>
-
-<!-- VIDEO PLAYER -->
-<div class="page" id="page-player">
-  <div class="topbar">
-    <button class="back-btn" onclick="goHome()">← Back</button>
-    <div class="timer-chip ok" id="playerTimerChip">⏱ 60:00 left</div>
-  </div>
-
-  <div class="player-wrap" id="playerWrap">
-    <video class="main-video" id="mainVideo" controls playsinline></video>
-    <div class="ad-overlay" id="adOverlay">
-      <div class="ad-media-wrap" id="adMediaWrap">
-        <div class="ad-placeholder-big" id="adPlaceholder"><div class="icon">▶</div><div id="adPlaceholderName">Sponsor</div></div>
-      </div>
-      <div class="ad-bar">
-        <span class="ad-bar-label">AD</span>
-        <span class="ad-bar-name" id="adBarName">—</span>
-        <div class="ad-bar-timer">
-          <svg class="ad-ring-mini" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="2.5"/><circle id="adRingMini" cx="10" cy="10" r="8" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="50.3" stroke-dashoffset="0" stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .5s linear"/></svg>
-          <span id="adBarCount">—</span>s
+      <div class="empty-divider"></div>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">⏱</div>
+          <div class="feature-title">One hour a day</div>
+          <div class="feature-desc">Your daily reading window keeps things intentional — no doom-scrolling through chapters.</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🎬</div>
+          <div class="feature-title">Ad-supported</div>
+          <div class="feature-desc">Watch short ads to earn extra reading time. Watch and share to unlock even more.</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📖</div>
+          <div class="feature-title">Any format</div>
+          <div class="feature-desc">EPUB, PDF, DOCX, TXT — upload any book format and we handle the rest.</div>
         </div>
       </div>
+      <div class="empty-cta">No books in the library yet — come back soon ✨</div>
     </div>
+
+    <!-- Library — shown when books exist -->
+    <div id="librarySection" style="display:none">
+      <div class="section-label">Library</div>
+      <div class="book-grid" id="bookGrid"></div>
+    </div>
+
   </div>
 
-  <div class="ep-legend">
-    <div class="leg"><div class="leg-dot" style="background:var(--success-bg);border:.5px solid var(--success-border)"></div>Done</div>
-    <div class="leg"><div class="leg-dot" style="background:var(--accent-light);border:.5px solid var(--accent)"></div>Watching</div>
-    <div class="leg"><div class="leg-dot" style="background:var(--surface);border:.5px solid var(--border-strong);opacity:.5"></div>Locked</div>
-    <div class="leg"><div class="leg-dot" style="background:var(--surface);border:.5px solid var(--border);opacity:.25"></div>Not yet</div>
-  </div>
-  <div class="ep-strip" id="videoEpStrip"></div>
-
-  <div id="videoDayDone" style="display:none"><div class="daydone-card" id="videoDaydoneCard"></div></div>
-  <div id="videoControls">
-    <div style="font-size:14px;font-weight:500;margin-bottom:4px" id="videoTitle">Episode 1</div>
-    <div style="font-size:12px;color:var(--text-3);margin-bottom:14px" id="videoMeta">Show</div>
+  <!-- READER -->
+  <div id="pageReader" style="display:none">
+    <button class="back-btn" onclick="goHome()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Back to library</button>
+    <div class="ep-legend">
+      <div class="leg-item"><div class="leg-dot" style="background:var(--success-l);border:.5px solid var(--success-b)"></div>Done</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--accent-l);border:.5px solid var(--accent)"></div>Reading</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--s1);border:.5px solid var(--border-strong);opacity:.5"></div>Locked</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--s1);border:.5px solid var(--border);opacity:.25"></div>Not yet available</div>
+    </div>
+    <div class="ep-strip" id="epStrip"></div>
     <div class="daily-stats">
-      <div class="stat-chip"><div class="stat-label">Watch time today</div><div class="stat-val" id="vStatTime">0 / 60 min</div><div class="stat-bar"><div class="stat-fill time" id="vStatTimeFill" style="width:0%"></div></div></div>
-      <div class="stat-chip"><div class="stat-label">Episodes today</div><div class="stat-val" id="vStatEps">0 / 6</div><div class="stat-bar"><div class="stat-fill eps" id="vStatEpsFill" style="width:0%"></div></div></div>
+      <div class="stat-chip"><div class="stat-chip-label">Reading time today</div><div class="stat-chip-val" id="statTime">0 / 60 min</div><div class="stat-chip-bar"><div class="stat-chip-fill time" id="statTimeFill" style="width:0%"></div></div></div>
+      <div class="stat-chip"><div class="stat-chip-label">Episodes today</div><div class="stat-chip-val" id="statEps">0 / 6</div><div class="stat-chip-bar"><div class="stat-chip-fill eps" id="statEpsFill" style="width:0%"></div></div></div>
     </div>
-    <div class="reader-nav" style="margin-top:0;padding-top:0;border-top:none">
-      <button class="navbtn def" id="vPrevBtn" onclick="videoPrev()">← Previous</button>
-      <span id="vEpCounter">1 / 1</span>
-      <button class="navbtn acc" id="vNextBtn" onclick="videoNext()">Next episode →</button>
+    <div class="session-bar">
+      <div class="session-bar-label"><span>Ad break schedule</span><span id="adBarTime">0 / 60 min</span></div>
+      <div class="session-rail-wrap">
+        <div class="session-rail"><div class="session-fill ok" id="sessionFill" style="width:0%"></div></div>
+        <div class="ad-marker" id="mk10" style="left:16.6%"></div>
+        <div class="ad-marker" id="mk30" style="left:50%"></div>
+        <div class="ad-marker" id="mk60" style="left:99%"></div>
+      </div>
+      <div class="ad-markers-label"><span>🎬 10 min</span><span>🎬 30 min</span><span>🎬 60 min</span></div>
     </div>
-  </div>
-</div>
 
-<!-- ADMIN -->
-<div class="page" id="page-admin">
-  <div class="topbar">
-    <button class="back-btn" onclick="goHome()">← Back</button>
-    <button class="topbtn danger" onclick="adminLogout()">Sign out</button>
-  </div>
-  <div id="adminLoginView">
-    <div class="admin-login-card">
-      <h3>🛡 Admin access</h3>
-      <p>Enter your admin password to manage content and ads.</p>
-      <input class="admin-input" id="adminPassInput" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkAdminPass()">
-      <button class="admin-login-btn" onclick="checkAdminPass()">Sign in</button>
-      <div class="login-err" id="loginErr">Incorrect password.</div>
-    </div>
-  </div>
-  <div id="adminContentView" style="display:none">
-    <div class="admin-wrap">
-
-      <!-- BOOKS -->
-      <div class="admin-section">
-        <h3>📚 Book library <span class="badge" id="bookCountBadge">0</span></h3>
-        <div id="adminBookList"></div>
-        <div style="margin-top:12px;padding-top:12px;border-top:.5px solid var(--border)">
-          <div class="upload-form-title" style="font-size:13px;font-weight:500;margin-bottom:12px">Add a new book</div>
-          <div class="cover-row">
-            <div class="thumb-box">
-              <div class="thumb-empty" id="bookCoverEmpty" onclick="document.getElementById('bookCoverIn').click()">🖼</div>
-              <img class="thumb-preview" id="bookCoverPreview" alt="">
-              <div class="thumb-change" id="bookCoverChange" onclick="document.getElementById('bookCoverIn').click()">Change</div>
-              <input type="file" id="bookCoverIn" accept="image/*" style="display:none" onchange="previewBookCover(this)">
-            </div>
-            <div style="flex:1">
-              <label class="add-label">Book title *</label>
-              <input class="field" id="bookTitleIn" placeholder="e.g. The Midnight Library" oninput="updateBookBtn()">
-              <label class="add-label">Author *</label>
-              <input class="field" id="bookAuthorIn" placeholder="e.g. Matt Haig" oninput="updateBookBtn()">
-              <label class="add-label">Episode length</label>
-              <select class="field" id="bookWpeIn">
-                <option value="1500">Short — 1,500 words (~6 min)</option>
-                <option value="2000" selected>Standard — 2,000 words (~8 min)</option>
-                <option value="2500">Long — 2,500 words (~10 min)</option>
-                <option value="3000">Extended — 3,000 words (~12 min)</option>
-              </select>
+    <div id="adSection" style="display:none">
+      <div class="ad-backdrop">
+        <div class="ad-card-inner">
+          <div class="ad-top-bar"><span class="ad-eyebrow">Ad break</span><span class="ad-context" id="adContext">Episode break</span></div>
+          <div class="ad-video-wrap" id="adVideoWrap">
+            <div class="ad-placeholder" id="adPlaceholder"><i class="ti ti-player-play" aria-hidden="true"></i><span id="adPlaceholderName">Sponsor message</span></div>
+            <div class="ad-countdown-overlay" id="adCountdownOverlay">
+              <svg class="ad-countdown-ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="2.5"/><circle id="adRingSmall" cx="10" cy="10" r="8" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="50.3" stroke-dashoffset="0" stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .5s linear"/></svg>
+              <span id="adCountNum">—</span>s
             </div>
           </div>
-          <div class="prog-bar-outer" id="bookProgBar"><div class="prog-bar-inner" id="bookProgFill"></div></div>
-          <div class="file-row" id="bookFileRow" onclick="document.getElementById('bookFileIn').click()">
-            <div class="file-row-info"><p id="bookFileLabel">No file chosen</p><span>Tap to choose a .txt file</span></div>
-            <button class="file-row-btn">Browse</button>
+          <div class="ad-info"><div class="ad-name" id="adName">—</div><div class="ad-desc" id="adDesc"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="dayDoneSection" style="display:none">
+      <div class="daydone-card">
+        <i class="ti ti-moon" aria-hidden="true" style="font-size:30px;color:var(--text-3)"></i>
+        <h3 id="dayDoneTitle">That's your hour for today!</h3>
+        <p id="dayDoneDesc">Your timer resets automatically tomorrow, or earn more time now.</p>
+        <div class="daydone-timer" id="dayDoneTimer">23:00:00</div>
+        <p style="font-size:11px;color:var(--text-3);margin-bottom:14px">Time until automatic reset</p>
+        <div class="earn-grid">
+          <div class="earn-row"><div class="earn-row-info"><p>Watch an ad</p><span>+15 minutes reading time</span></div><button class="ubtn acc" onclick="doEarn('ad')">Watch</button></div>
+          <div class="earn-row"><div class="earn-row-info"><p>Share this book</p><span>+30 minutes · +1 extra episode</span></div><button class="ubtn def" onclick="doEarn('share')">Share</button></div>
+          <div class="earn-row"><div class="earn-row-info"><p>Watch and share</p><span>+45 minutes · +2 extra episodes</span></div><button class="ubtn success" onclick="doEarn('both')">Do both</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="readerMain">
+      <div class="reader-header">
+        <div class="reader-title" id="readerTitle">Episode 1</div>
+        <div class="timer-chip ok" id="timerChip">⏱ 60:00 left</div>
+      </div>
+      <div class="progress-rail"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="reader-body" id="readerBody"></div>
+      <div class="reader-nav">
+        <button class="navbtn def" id="prevBtn" onclick="readerPrev()">← Previous</button>
+        <span id="epCounter">1 / 1</span>
+        <button class="navbtn acc" id="nextBtn" onclick="readerNext()">Next episode →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="pageAdmin" style="display:none">
+    <button class="back-btn" onclick="goHome()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Back</button>
+
+    <div id="adminLoginView">
+      <div class="admin-login-card">
+        <h3>Admin access</h3>
+        <p>Enter your password to manage books, ads and view analytics.</p>
+        <input class="admin-input" id="adminPassInput" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkAdminPass()">
+        <button class="admin-login-btn" onclick="checkAdminPass()">Sign in</button>
+        <div class="login-err" id="loginErr">Incorrect password.</div>
+      </div>
+    </div>
+
+    <div id="adminPanelView" style="display:none">
+      <div class="admin-tabs">
+        <button class="admin-tab on" onclick="switchAdminTab('books',this)">📚 Books</button>
+        <button class="admin-tab" onclick="switchAdminTab('ads',this)">🎬 Ads</button>
+        <button class="admin-tab" onclick="switchAdminTab('analytics',this)">📊 Analytics</button>
+      </div>
+
+      <!-- BOOKS TAB -->
+      <div id="adminTab-books">
+        <div class="admin-section">
+          <div class="admin-section-title">Book library <span class="badge" id="bookCountBadge">0 books</span></div>
+          <div id="adminBookList"></div>
+          <div style="margin-top:12px;padding-top:12px;border-top:.5px solid var(--border)">
+            <div style="font-size:13px;font-weight:500;margin-bottom:12px">Add a new book</div>
+            <div class="cover-row">
+              <div class="cover-box">
+                <div class="cover-empty" id="coverEmpty" onclick="document.getElementById('coverFileIn').click()"><i class="ti ti-photo" aria-hidden="true"></i><span>Cover</span></div>
+                <img class="cover-thumb" id="coverThumb" style="display:none" alt="Cover">
+                <div class="cover-change" id="coverChange" onclick="document.getElementById('coverFileIn').click()" style="display:none">Change</div>
+                <input type="file" id="coverFileIn" accept="image/*" style="display:none" onchange="previewCover(this)">
+              </div>
+              <div style="flex:1">
+                <label class="add-label">Book title *</label>
+                <input class="field" id="bookTitleIn" placeholder="e.g. The Midnight Library" oninput="updateBookBtn()">
+                <label class="add-label">Author *</label>
+                <input class="field" id="bookAuthorIn" placeholder="e.g. Matt Haig" oninput="updateBookBtn()">
+                <label class="add-label">Episode length</label>
+                <select class="field" id="wpeSelect">
+                  <option value="1500">Short — 1,500 words (~6 min)</option>
+                  <option value="2000" selected>Standard — 2,000 words (~8 min)</option>
+                  <option value="2500">Long — 2,500 words (~10 min)</option>
+                  <option value="3000">Extended — 3,000 words (~12 min)</option>
+                </select>
+              </div>
+            </div>
+            <div class="prog-wrap" id="bookProgWrap"><div class="prog-bar-outer"><div class="prog-bar-inner" id="bookProgBar" style="width:0%"></div></div></div>
+            <div class="file-pick-row" id="bookFileRow" onclick="document.getElementById('bookFileIn').click()">
+              <i class="ti ti-book-upload file-pick-icon" aria-hidden="true"></i>
+              <div class="file-pick-info"><p id="bookFileLabel">No book file chosen</p><span id="bookFileSub">Supports .txt, .epub, .pdf, .docx, .rtf</span></div>
+              <button class="file-pick-btn" type="button">Browse</button>
+            </div>
+            <input type="file" id="bookFileIn" accept=".txt,.epub,.pdf,.docx,.doc,.rtf" style="display:none" onchange="bookFileChosen(this)">
+            <button class="big-btn" id="addBookBtn" onclick="addBook()" disabled>+ Add to library</button>
           </div>
-          <input type="file" id="bookFileIn" accept=".txt" style="display:none" onchange="bookFileChosen(this)">
-          <button class="big-btn red" id="addBookBtn" onclick="addBook()" disabled>+ Add to library</button>
         </div>
       </div>
 
-      <!-- SHOWS -->
-      <div class="admin-section">
-        <h3>🎬 Show library <span class="badge" id="showCountBadge">0</span></h3>
-        <div id="adminShowList"></div>
-        <div style="margin-top:12px;padding-top:12px;border-top:.5px solid var(--border)">
-          <div style="font-size:13px;font-weight:500;margin-bottom:12px">Add an episode to a show</div>
-          <div class="cover-row">
-            <div class="thumb-box">
-              <div class="thumb-empty" id="showThumbEmpty" onclick="document.getElementById('showThumbIn').click()">🖼</div>
-              <img class="thumb-preview" id="showThumbPreview" alt="">
-              <div class="thumb-change" id="showThumbChange" onclick="document.getElementById('showThumbIn').click()">Change</div>
-              <input type="file" id="showThumbIn" accept="image/*" style="display:none" onchange="previewShowThumb(this)">
+      <!-- ADS TAB -->
+      <div id="adminTab-ads" style="display:none">
+        <div class="admin-section">
+          <div class="admin-section-title">Ad library <span class="badge" id="adCountBadge">0 / 10</span></div>
+          <p style="font-size:11px;color:var(--text-3);margin-bottom:12px">Ads play at 10 min, 30 min and 60 min into each session, and between every episode.</p>
+          <div id="adminAdList"></div>
+          <div style="margin-top:12px;padding-top:12px;border-top:.5px solid var(--border)">
+            <label class="add-label">Ad name</label>
+            <input class="field" id="adNameIn" placeholder="e.g. Audible Premium">
+            <div class="size-warn" id="sizeWarn">⚠️ Large file (<span id="sizeWarnVal"></span>). Keep ad videos under 50 MB for best results.</div>
+            <div class="file-pick-row" id="adFileRow" onclick="document.getElementById('adFileIn').click()">
+              <i class="ti ti-video file-pick-icon" aria-hidden="true"></i>
+              <div class="file-pick-info"><p id="adFileLabel">No ad file chosen</p><span>Video or image (.mp4, .mov, .jpg, .png)</span></div>
+              <button class="file-pick-btn" type="button">Browse</button>
             </div>
-            <div style="flex:1">
-              <label class="add-label">Show title *</label>
-              <input class="field" id="showTitleIn" placeholder="e.g. My Web Series" oninput="updateEpBtn()">
-              <label class="add-label">Creator / Channel</label>
-              <input class="field" id="showCreatorIn" placeholder="e.g. Studio Name">
-              <label class="add-label">Episode title *</label>
-              <input class="field" id="epTitleIn" placeholder="e.g. The Beginning" oninput="updateEpBtn()">
-            </div>
+            <input type="file" id="adFileIn" accept="video/*,image/*,.mov" style="display:none" onchange="adFileChosen(this)">
+            <button class="big-btn grn" id="addAdBtn" onclick="addAd()" disabled>+ Add ad to rotation</button>
           </div>
-          <div class="size-warn" id="videoSizeWarn">⚠️ Large file (<span id="videoSizeVal"></span>). Large videos may be slow to upload.</div>
-          <div class="prog-bar-outer" id="epProgBar"><div class="prog-bar-inner" id="epProgFill"></div></div>
-          <div class="file-row" id="epFileRow" onclick="document.getElementById('epFileIn').click()">
-            <div class="file-row-info"><p id="epFileLabel">No video file chosen</p><span>Tap to choose .mp4, .mov, .webm</span></div>
-            <button class="file-row-btn">Browse</button>
-          </div>
-          <input type="file" id="epFileIn" accept="video/*,.mov" style="display:none" onchange="epFileChosen(this)">
-          <button class="big-btn red" id="addEpBtn" onclick="addEpisode()" disabled>+ Add episode to show</button>
         </div>
       </div>
 
-      <!-- ADS -->
-      <div class="admin-section">
-        <h3>🎯 Ad library <span class="badge" id="adCountBadge">0 / 10</span></h3>
-        <p style="font-size:11px;color:var(--text-3);margin-bottom:12px">Ads play at 10 min, 30 min, 60 min and between episodes. Full video plays with live countdown.</p>
-        <div id="adminAdList"></div>
-        <div style="margin-top:12px;padding-top:12px;border-top:.5px solid var(--border)">
-          <label class="add-label">Ad name</label>
-          <input class="field" id="adNameIn" placeholder="e.g. Audible Premium">
-          <div class="size-warn" id="adSizeWarn">⚠️ Large file (<span id="adSizeVal"></span>). Keep ad videos under 50 MB if possible.</div>
-          <div class="file-row" id="adFileRow" onclick="document.getElementById('adFileIn').click()">
-            <div class="file-row-info"><p id="adFileLabel">No file chosen</p><span>Video or image</span></div>
-            <button class="file-row-btn">Browse</button>
-          </div>
-          <input type="file" id="adFileIn" accept="video/*,image/*,.mov" style="display:none" onchange="adFileChosen(this)">
-          <button class="big-btn grn" id="addAdBtn" onclick="addAd()" disabled>+ Add ad to rotation</button>
+      <!-- ANALYTICS TAB -->
+      <div id="adminTab-analytics" style="display:none">
+        <div id="analyticsContent">
+          <div style="text-align:center;padding:40px;color:var(--text-3)">Loading analytics...</div>
         </div>
       </div>
 
-    </div>
-  </div>
-</div>
-
-<!-- TIMED AD MODAL (for reading breaks) -->
-<div class="ad-modal-backdrop" id="adModalBackdrop">
-  <div class="ad-modal">
-    <div class="ad-modal-top">
-      <span class="ad-modal-label">Ad break</span>
-      <span class="ad-modal-context" id="adModalContext">10 minute break</span>
-    </div>
-    <div class="ad-modal-media" id="adModalMedia">
-      <div class="ad-modal-ph"><div class="icon">▶</div><div id="adModalPhName">Sponsor</div></div>
-    </div>
-    <div class="ad-modal-info">
-      <div class="ad-modal-text"><div class="ad-modal-name" id="adModalName">—</div></div>
-      <div class="ad-modal-ring">
-        <svg width="48" height="48" viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="none" stroke="var(--surface-2)" stroke-width="5"/><circle id="adModalRing" cx="24" cy="24" r="20" fill="none" stroke="var(--accent)" stroke-width="5" stroke-dasharray="125.7" stroke-dashoffset="0" stroke-linecap="round" style="transform-origin:50% 50%;transition:stroke-dashoffset .5s linear;transform:rotate(-90deg)"/></svg>
-        <div class="ad-modal-count" id="adModalCount">—</div>
+      <div style="text-align:center;margin-top:16px">
+        <button class="topbtn danger" onclick="adminLogout()"><i class="ti ti-logout" aria-hidden="true"></i> Sign out of admin</button>
       </div>
     </div>
   </div>
-</div>
 
+</div><!-- .shell -->
 <div class="toast" id="toast"></div>
 
 <script>
+// ── Config ────────────────────────────────────────────────────
 const API = '';
-const DAILY_LIMIT  = 3600;
-const EP_MAX       = 6;
-const OPEN_WINDOW  = 3;
-const AD_TRIGGERS  = [600, 1800, 3600];
+const DAILY_LIMIT = 3600;
+const EP_MAX = 6;
+const OPEN_WINDOW = 3;
+const AD_TRIGGERS = [600, 1800, 3600];
 
+// ── State ─────────────────────────────────────────────────────
 let sessionId = localStorage.getItem('pb_session') || null;
-let adminPass  = null; // never stored
+let adminPass = null;
+let daily = null;
+let activeBook = null;
+let bookProg = null;
+let tickTimer = null, adTimer = null, dayTimer = null, afterAdFn = null;
+let pendingBookFile = null, pendingCoverFile = null, pendingAdFile = null;
+let currentBookId = null; // for analytics tracking
 
-let activeBook  = null; // { id, title, episodes[] }
-let activeShow  = null; // { id, title, episodes[] }
-let daily       = null; // from server
-let bookProg    = null;
-let showProg    = null;
-let tickTimer   = null, adTimer = null, dayTimer = null, afterAdFn = null;
-
-let pendingBookFile = null, pendingBookCover = null;
-let pendingEpFile   = null, pendingShowThumb = null;
-let pendingAdFile   = null;
-
-// ── Boot ─────────────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────────
 async function boot() {
+  if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   try {
-    const r = await fetch(`${API}/api/session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId })
-    });
-    if (!r.ok) throw new Error('Session API returned ' + r.status);
+    const r = await fetch(`${API}/api/session`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sessionId, path: location.pathname }) });
     const d = await r.json();
     sessionId = d.sessionId;
     localStorage.setItem('pb_session', sessionId);
     await refreshDaily();
-    loadBooks();
-    loadShows();
-  } catch(err) {
-    console.error('Boot error:', err);
-    // UI still works — just show empty states and retry
-    sh('booksEmpty').style.display = 'block';
-    sh('showsEmpty').style.display = 'block';
-    sh('booksEmpty').querySelector('p').textContent = 'Could not connect to server. Please refresh the page.';
-    sh('showsEmpty').querySelector('p').textContent = 'Could not connect to server. Please refresh the page.';
-  }
+  } catch(e) { console.warn('Session init failed:', e); }
+  loadBooks();
 }
 
-function sh(id) { return document.getElementById(id); }
+function g(id) { return document.getElementById(id); }
 let toastT;
-function toast(msg) { const t=sh('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),3000); }
+function toast(msg) { const t=g('toast');t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),3200); }
+function aH() { return { 'x-session-id': sessionId, 'Content-Type': 'application/json' }; }
+function adH() { return { 'x-session-id': sessionId, 'x-admin-pass': adminPass, 'Content-Type': 'application/json' }; }
 
-function authHeaders() { return { 'x-session-id': sessionId, 'Content-Type': 'application/json' }; }
-function adminHeaders(extra={}) { return { 'x-session-id': sessionId, 'x-admin-pass': adminPass, ...extra }; }
+// ── Pages ─────────────────────────────────────────────────────
+function showPage(id) { ['pageHome','pageReader','pageAdmin'].forEach(p=>g(p).style.display='none'); g(id).style.display='block'; }
+function goHome() { clearInterval(tickTimer);clearInterval(dayTimer);clearInterval(adTimer); activeBook=null;currentBookId=null; showPage('pageHome'); loadBooks(); }
+function toggleAdmin() { showPage('pageAdmin'); g('adminToggleBtn').innerHTML='<i class="ti ti-x" aria-hidden="true"></i> Close'; clearInterval(tickTimer); g('adminLoginView').style.display='block'; g('adminPanelView').style.display='none'; g('adminPassInput').value=''; g('loginErr').style.display='none'; setTimeout(()=>g('adminPassInput').focus(),100); }
+function adminLogout() { adminPass=null; goHome(); }
 
-// ── Page switching ────────────────────────────────────────────
-function showPage(id) {
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  const target = document.getElementById('page-'+id);
-  if(target) target.classList.add('active');
-  else console.error('Page not found: page-'+id);
-}
-function switchMainTab(tab, btn) {
-  const pageId = tab==='books' ? 'books' : 'videos';
-  showPage(pageId);
-  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('on'));
-  // Activate the right tab button in both topbars
-  document.querySelectorAll('.nav-tab').forEach(t=>{
-    if((tab==='books'&&t.textContent.includes('Books'))||(tab==='videos'&&t.textContent.includes('Videos'))) t.classList.add('on');
-  });
-  // Reload content when switching tabs
-  if(tab==='books') loadBooks();
-  else loadShows();
-}
-function goHome() {
-  clearInterval(tickTimer); clearInterval(dayTimer); clearInterval(adTimer);
-  try { const vid=sh('mainVideo'); if(vid){vid.pause();vid.src='';} } catch(e){}
-  activeBook=null; activeShow=null;
-  const onVideos = sh('page-videos') && sh('page-videos').classList.contains('active');
-  showPage(onVideos ? 'videos' : 'books');
-  loadBooks(); loadShows();
-}
-
-// ── Daily state ───────────────────────────────────────────────
-async function refreshDaily() {
+async function checkAdminPass() {
+  const pass = g('adminPassInput').value;
   try {
-    if (!sessionId) return;
-    const r = await fetch(`${API}/api/daily`, { headers: authHeaders() });
-    if (!r.ok) return;
-    daily = await r.json();
-  } catch(e) { console.warn('refreshDaily failed:', e); }
+    const r = await fetch(`${API}/api/admin/verify`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password:pass}) });
+    if (r.ok) { adminPass=pass; g('adminLoginView').style.display='none'; g('adminPanelView').style.display='block'; loadAdminBooks(); loadAdminAds(); }
+    else { g('loginErr').style.display='block'; g('adminPassInput').value=''; }
+  } catch(e) { g('loginErr').style.display='block'; }
 }
-function effectiveTimeLimit() { return DAILY_LIMIT+(daily?.bonus_secs||0); }
-function effectiveEpLimit() { return EP_MAX+(daily?.bonus_eps||0); }
-function isTimeDone() { return (daily?.secs_watched||0)>=effectiveTimeLimit(); }
-function isEpDone() { return (daily?.eps_today||0)>=effectiveEpLimit(); }
+
+function switchAdminTab(name, btn) {
+  ['books','ads','analytics'].forEach(t=>{ g('adminTab-'+t).style.display='none'; });
+  document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('on'));
+  g('adminTab-'+name).style.display='block';
+  btn.classList.add('on');
+  if (name==='analytics') loadAnalytics();
+}
+
+// ── Daily ─────────────────────────────────────────────────────
+async function refreshDaily() {
+  try { if(!sessionId)return; const r=await fetch(`${API}/api/daily`,{headers:aH()}); if(r.ok)daily=await r.json(); } catch(e){}
+}
+function eTL() { return DAILY_LIMIT+(daily?.bonus_secs||0); }
+function eEL() { return EP_MAX+(daily?.bonus_eps||0); }
+function isTimeDone() { return (daily?.secs_watched||0)>=eTL(); }
+function isEpDone() { return (daily?.eps_today||0)>=eEL(); }
 function isDayDone() { return isTimeDone()||isEpDone(); }
 
 async function tick(delta=10) {
-  await fetch(`${API}/api/daily/tick`, { method:'POST', headers: authHeaders(), body: JSON.stringify({delta}) });
-  await refreshDaily();
+  try { await fetch(`${API}/api/daily/tick`,{method:'POST',headers:aH(),body:JSON.stringify({delta,bookId:currentBookId,episodeNumber:bookProg?.current_ep})}); await refreshDaily(); } catch(e){}
 }
-async function markAdHit(trigger) {
-  await fetch(`${API}/api/daily/ad-hit`, { method:'POST', headers: authHeaders(), body: JSON.stringify({trigger}) });
-  await refreshDaily();
-}
-async function markEpDone() {
-  await fetch(`${API}/api/daily/episode-done`, { method:'POST', headers: authHeaders() });
-  await refreshDaily();
-}
-async function earn(action) {
-  await fetch(`${API}/api/daily/earn`, { method:'POST', headers: authHeaders(), body: JSON.stringify({action}) });
-  await refreshDaily();
+async function markAdHit(t) { try{await fetch(`${API}/api/daily/ad-hit`,{method:'POST',headers:aH(),body:JSON.stringify({trigger:t})});await refreshDaily();}catch(e){} }
+async function markEpDone() { try{await fetch(`${API}/api/daily/episode-done`,{method:'POST',headers:aH()});await refreshDaily();}catch(e){} }
+async function doEarn(action) {
+  try { await fetch(`${API}/api/daily/earn`,{method:'POST',headers:aH(),body:JSON.stringify({action})}); await refreshDaily(); } catch(e){}
+  toast('Earned '+{ad:'+15 min',share:'+30 min · +1 ep',both:'+45 min · +2 eps'}[action]);
+  updateStats();updateTimerChip();
+  if(!isDayDone()){clearInterval(dayTimer);showReaderSection('reader');loadEpisode(bookProg.current_ep);startTick();}
 }
 
-// ── Save progress ─────────────────────────────────────────────
-async function saveProgress(type, contentId, currentEp, doneEps) {
-  await fetch(`${API}/api/progress/${type}/${contentId}`, { method:'POST', headers: authHeaders(), body: JSON.stringify({currentEp,doneEps}) });
+// ── Progress ──────────────────────────────────────────────────
+async function loadProgress(id) {
+  try { const r=await fetch(`${API}/api/progress/${id}`,{headers:aH()}); return r.ok?await r.json():{current_ep:0,done_eps:[]}; } catch(e){return{current_ep:0,done_eps:[]};}
 }
-async function loadProgress(type, contentId) {
-  const r = await fetch(`${API}/api/progress/${type}/${contentId}`, { headers: authHeaders() });
-  return r.json();
+async function saveProgress(id,ep,done) {
+  try { await fetch(`${API}/api/progress/${id}`,{method:'POST',headers:aH(),body:JSON.stringify({currentEp:ep,doneEps:done})}); } catch(e){}
 }
 
-// ── BOOKS ─────────────────────────────────────────────────────
+// ── Home ──────────────────────────────────────────────────────
 async function loadBooks() {
   try {
     const r = await fetch(`${API}/api/books`);
-    if (!r.ok) throw new Error('Books fetch failed');
+    if (!r.ok) { showEmptyHero(); return; }
     const books = await r.json();
-    const grid = sh('bookGrid'), empty = sh('booksEmpty');
-    if (!books.length) { grid.innerHTML=''; empty.style.display='block'; return; }
-    empty.style.display='none';
-    grid.innerHTML = books.map(b => `
-      <div class="card" onclick="openBook('${b.id}')">
-        <div class="card-thumb">
-          ${b.coverUrl?`<img src="${b.coverUrl}" alt="${b.title}">`:'📖'}
+    if (!books.length) { showEmptyHero(); return; }
+    g('emptyHero').style.display='none';
+    g('librarySection').style.display='block';
+    g('bookGrid').innerHTML = books.map(b => {
+      return `<div class="book-card" onclick="openBook('${b.id}')">
+        <div class="book-cover">
+          ${b.coverUrl?`<img src="${b.coverUrl}" alt="${b.title}">`:'<span class="book-cover-placeholder">📖</span>'}
         </div>
-        <div class="card-body">
-          <div class="card-title">${b.title}</div>
-          <div class="card-sub">${b.author||''} · ${b.total_episodes} episodes</div>
+        <div class="book-card-body">
+          <div class="book-card-title">${b.title}</div>
+          <div class="book-card-author">${b.author||''}</div>
+          <div class="book-card-meta">
+            <span class="book-card-eps">${b.total_episodes} episodes</span>
+          </div>
         </div>
-      </div>`).join('');
-  } catch(e) { console.warn('loadBooks failed:', e); }
+      </div>`;
+    }).join('');
+  } catch(e) { showEmptyHero(); }
+}
+
+function showEmptyHero() {
+  g('emptyHero').style.display='block';
+  g('librarySection').style.display='none';
 }
 
 async function openBook(id) {
-  const r = await fetch(`${API}/api/books/${id}`);
-  activeBook = await r.json();
-  bookProg = await loadProgress('book', id);
-  await refreshDaily();
-  showPage('reader');
-  renderBookStrip();
-  updateBookStats();
-  if (isDayDone()) { showReaderSection('daydone'); renderDaydone('readerDaydoneCard', 'reader'); startDayTimer('reader'); }
-  else { await loadBookEpisode(bookProg.current_ep||0); startReadTick(); }
+  try {
+    const r = await fetch(`${API}/api/books/${id}`);
+    if(!r.ok){toast('Could not load book');return;}
+    activeBook = await r.json();
+    currentBookId = id;
+    bookProg = await loadProgress(id);
+    await refreshDaily();
+    showPage('pageReader');
+    renderStrip();
+    updateStats(); updateTimerChip();
+    if(isDayDone()){showReaderSection('daydone');startDayTimer();}
+    else{showReaderSection('reader');loadEpisode(bookProg.current_ep||0);startTick();}
+  } catch(e){toast('Error loading book');}
 }
 
-function epBookState(i) {
-  const done = bookProg.done_eps||[];
-  const cur  = bookProg.current_ep||0;
-  if (done.includes(i)) return 'done';
-  if (i===cur) return 'cur';
-  const wEnd = cur+OPEN_WINDOW-1;
-  if (i>cur&&i<=wEnd) return isDayDone()?'lk':'available';
-  if (i>wEnd) return 'fut';
+// ── Episode strip ─────────────────────────────────────────────
+function epState(i) {
+  const done=bookProg.done_eps||[], cur=bookProg.current_ep||0;
+  if(done.includes(i)) return 'done';
+  if(i===cur) return 'cur';
+  const wEnd=cur+OPEN_WINDOW-1;
+  if(i>cur&&i<=wEnd) return isDayDone()?'lk':'available';
+  if(i>wEnd) return 'future';
   return 'available';
 }
-
-function renderBookStrip() {
-  const strip = sh('bookEpStrip'); strip.innerHTML='';
-  if (!activeBook) return;
+function renderStrip() {
+  const strip=g('epStrip'); strip.innerHTML='';
+  if(!activeBook)return;
   activeBook.episodes.forEach((ep,i)=>{
-    const st=epBookState(i), pill=document.createElement('div');
+    const st=epState(i), pill=document.createElement('div');
     pill.className='ep-pill '+st;
-    pill.title=st==='fut'?'Finish earlier episodes first':st==='lk'?'Daily limit reached':ep.title;
-    if(st==='done')pill.innerHTML='✓';
-    else if(st==='lk')pill.innerHTML=`${ep.episode_number}<span class="lico">🔒</span>`;
-    else if(st==='fut')pill.innerHTML='🔒';
-    else pill.innerHTML=ep.episode_number;
-    if(st!=='fut'&&st!=='lk') pill.onclick=()=>jumpBookEp(i);
+    pill.title=st==='future'?'Finish earlier episodes first':st==='lk'?'Daily limit reached':ep.title;
+    if(st==='done')pill.innerHTML='<span>✓</span>';
+    else if(st==='lk')pill.innerHTML='<span>'+ep.episode_number+'</span><span class="lock-ico">🔒</span>';
+    else if(st==='future')pill.innerHTML='<span style="font-size:9px">🔒</span>';
+    else pill.innerHTML='<span>'+ep.episode_number+'</span>';
+    if(st!=='future'&&st!=='lk') pill.onclick=()=>jumpEp(i);
     strip.appendChild(pill);
   });
-  const cur=strip.children[bookProg.current_ep||0];if(cur)cur.scrollIntoView({block:'nearest',inline:'center'});
+  strip.children[bookProg.current_ep||0]?.scrollIntoView({block:'nearest',inline:'center'});
+}
+function jumpEp(i) {
+  const st=epState(i);
+  if(st==='lk'){showReaderSection('daydone');startDayTimer();return;}
+  if(st==='future')return;
+  showReaderSection('reader');loadEpisode(i);
 }
 
-async function jumpBookEp(i) {
-  const st=epBookState(i);
-  if(st==='lk'){showReaderSection('daydone');renderDaydone('readerDaydoneCard','reader');startDayTimer('reader');return;}
-  if(st==='fut') return;
-  showReaderSection('reader'); await loadBookEpisode(i);
-}
-
-async function loadBookEpisode(i) {
-  const ep = activeBook.episodes[i];
-  const r  = await fetch(`${API}/api/books/${activeBook.id}/episodes/${ep.episode_number}`);
-  const data = await r.json();
-  bookProg.current_ep = i;
-  await saveProgress('book', activeBook.id, i, bookProg.done_eps||[]);
-  sh('readerTitle').textContent = `Episode ${ep.episode_number} — ${ep.title}`;
-  sh('rEpCounter').textContent  = `${i+1} / ${activeBook.episodes.length}`;
-  sh('readerProgress').style.width = `${((i+1)/activeBook.episodes.length)*100}%`;
-  sh('readerBody').innerHTML = data.content.split(/\n\n+/).filter(Boolean).map(p=>`<p>${p.trim()}</p>`).join('');
-  sh('rPrevBtn').disabled = i===0;
-  const nst = i+1<activeBook.episodes.length?epBookState(i+1):null;
-  sh('rNextBtn').disabled = !nst||nst==='fut'||isEpDone();
-  renderBookStrip(); updateBookStats();
+async function loadEpisode(i) {
+  const ep=activeBook.episodes[i]; if(!ep)return;
+  try {
+    const r=await fetch(`${API}/api/books/${activeBook.id}/episodes/${ep.episode_number}`);
+    if(!r.ok){toast('Could not load episode');return;}
+    const data=await r.json();
+    bookProg.current_ep=i;
+    await saveProgress(activeBook.id, i, bookProg.done_eps||[]);
+    g('readerTitle').textContent='Episode '+ep.episode_number+' — '+ep.title;
+    g('epCounter').textContent=(i+1)+' / '+activeBook.episodes.length;
+    g('progressFill').style.width=(((i+1)/activeBook.episodes.length)*100)+'%';
+    g('readerBody').innerHTML=data.content.split(/\n\n+/).filter(Boolean).map(p=>'<p>'+p.trim()+'</p>').join('');
+    g('prevBtn').disabled=i===0;
+    const nst=i+1<activeBook.episodes.length?epState(i+1):null;
+    g('nextBtn').disabled=!nst||nst==='future'||isEpDone();
+    renderStrip();updateStats();updateTimerChip();
+    window.scrollTo(0,0);
+  } catch(e){toast('Error loading episode');}
 }
 
 async function readerNext() {
-  const next = (bookProg.current_ep||0)+1;
-  if (next>=activeBook.episodes.length) return;
-  const done = bookProg.done_eps||[];
-  if (!done.includes(bookProg.current_ep)) done.push(bookProg.current_ep);
+  const next=(bookProg.current_ep||0)+1;
+  if(next>=activeBook.episodes.length)return;
+  const done=bookProg.done_eps||[];
+  if(!done.includes(bookProg.current_ep))done.push(bookProg.current_ep);
   bookProg.done_eps=done;
   await markEpDone();
-  await saveProgress('book', activeBook.id, bookProg.current_ep, done);
-  if (epBookState(next)==='fut') return;
-  if (isDayDone()) { showReaderSection('daydone'); renderDaydone('readerDaydoneCard','reader'); startDayTimer('reader'); renderBookStrip(); return; }
-  await showTimedAd('Episode break', async()=>{ showReaderSection('reader'); await loadBookEpisode(next); startReadTick(); });
+  await saveProgress(activeBook.id, bookProg.current_ep, done);
+  if(epState(next)==='future')return;
+  if(isDayDone()){showReaderSection('daydone');startDayTimer();renderStrip();updateStats();return;}
+  showReaderSection('ad');
+  g('adContext').textContent='Episode break';
+  showAd(async()=>{showReaderSection('reader');await loadEpisode(next);startTick();});
 }
-function readerPrev() { if((bookProg.current_ep||0)>0) loadBookEpisode((bookProg.current_ep||0)-1); }
-
-function showReaderSection(name) {
-  sh('readerDayDone').style.display = name==='daydone'?'block':'none';
-  sh('readerMain').style.display    = name==='reader'?'block':'none';
-}
-
-function startReadTick() {
-  clearInterval(tickTimer);
-  tickTimer = setInterval(async ()=>{
-    if(sh('adModalBackdrop').classList.contains('show')) return;
-    if(sh('readerDayDone').style.display!=='none') return;
-    await tick(10); updateBookStats(); updateTimerChip('reader');
-    const adsHit = daily?.ads_hit||[];
-    for(const t of AD_TRIGGERS){
-      if(!adsHit.includes(t)&&(daily?.secs_watched||0)>=t){
-        await markAdHit(t);
-        clearInterval(tickTimer);
-        const label=t===600?'10 minute break':t===1800?'30 minute break':'1 hour milestone';
-        await showTimedAd(label, async()=>{ startReadTick(); updateBookStats(); });
-        return;
-      }
-    }
-    if(isDayDone()){clearInterval(tickTimer);showReaderSection('daydone');renderDaydone('readerDaydoneCard','reader');startDayTimer('reader');renderBookStrip();}
-  }, 10000);
+function readerPrev(){if((bookProg.current_ep||0)>0)loadEpisode((bookProg.current_ep||0)-1);}
+function showReaderSection(n){
+  g('adSection').style.display=n==='ad'?'block':'none';
+  g('dayDoneSection').style.display=n==='daydone'?'block':'none';
+  g('readerMain').style.display=n==='reader'?'block':'none';
 }
 
-function updateBookStats() {
-  updateDailyDisplay('r');
-  updateTimerChip('reader');
+// ── Stats ─────────────────────────────────────────────────────
+function updateStats() {
+  const tl=eTL(),secs=Math.min(daily?.secs_watched||0,tl),tp=(secs/tl)*100;
+  g('statTime').textContent=Math.floor(secs/60)+' / '+Math.floor(tl/60)+' min';
+  const tf=g('statTimeFill');tf.style.width=tp+'%';tf.className='stat-chip-fill time'+(tp>=100?' full':tp>=80?' warn':'');
+  const el=eEL(),eps=Math.min(daily?.eps_today||0,el),ep=(eps/el)*100;
+  g('statEps').textContent=eps+' / '+el;
+  g('statEpsFill').style.width=ep+'%';
+  g('sessionFill').style.width=tp+'%';g('sessionFill').className='session-fill '+(tp<50?'ok':tp<80?'warn':'full');
+  g('adBarTime').textContent=Math.floor(secs/60)+' / '+Math.floor(tl/60)+' min';
+  AD_TRIGGERS.forEach((t,i)=>{const el=g(['mk10','mk30','mk60'][i]);if(el)el.className='ad-marker'+((daily?.ads_hit||[]).includes(t)?' hit':'');});
 }
-
-// ── SHOWS / VIDEOS ────────────────────────────────────────────
-async function loadShows() {
-  try {
-    const r = await fetch(`${API}/api/shows`);
-    if (!r.ok) throw new Error('Shows fetch failed');
-    const shows = await r.json();
-    const grid = sh('showGrid'), empty = sh('showsEmpty');
-    if (!shows.length) { grid.innerHTML=''; empty.style.display='block'; return; }
-    empty.style.display='none';
-    grid.innerHTML = shows.map(s => `
-      <div class="card" onclick="openShow('${s.id}')">
-        <div class="card-thumb">
-          ${s.thumbUrl?`<img src="${s.thumbUrl}" alt="${s.title}">`:'🎬'}
-          <div class="play-icon">▶</div>
-          <div class="card-ep-badge">${s.episodeCount} ep${s.episodeCount!==1?'s':''}</div>
-        </div>
-        <div class="card-body">
-          <div class="card-title">${s.title}</div>
-          <div class="card-sub">${s.creator||''}</div>
-        </div>
-      </div>`).join('');
-  } catch(e) { console.warn('loadShows failed:', e); }
-}
-
-async function openShow(id) {
-  const r = await fetch(`${API}/api/shows/${id}`);
-  activeShow = await r.json();
-  showProg = await loadProgress('show', id);
-  await refreshDaily();
-  showPage('player');
-  renderVideoStrip();
-  updateVideoStats();
-  if (isDayDone()) { sh('videoDayDone').style.display='block'; sh('videoControls').style.display='none'; renderDaydone('videoDaydoneCard','video'); startDayTimer('video'); }
-  else { await loadVideoEpisode(showProg.current_ep||0); startVideoTick(); }
-}
-
-function epVideoState(i) {
-  const done = showProg.done_eps||[];
-  const cur  = showProg.current_ep||0;
-  if (done.includes(i)) return 'done';
-  if (i===cur) return 'cur';
-  const wEnd = cur+OPEN_WINDOW-1;
-  if (i>cur&&i<=wEnd) return isDayDone()?'lk':'available';
-  if (i>wEnd) return 'fut';
-  return 'available';
-}
-
-function renderVideoStrip() {
-  const strip = sh('videoEpStrip'); strip.innerHTML='';
-  if (!activeShow) return;
-  activeShow.episodes.forEach((ep,i)=>{
-    const st=epVideoState(i), div=document.createElement('div');
-    div.className='ep-pill '+st; div.style.cssText='width:70px;height:auto;border-radius:8px;flex-direction:column;gap:3px;padding:6px 4px;';
-    div.title=st==='fut'?'Watch earlier episodes first':st==='lk'?'Daily limit reached':ep.title;
-    div.innerHTML=`<div style="font-size:11px;font-weight:500">Ep ${ep.episode_number}</div><div style="font-size:10px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${ep.title}</div>${st==='lk'||st==='fut'?'<div style="font-size:10px">🔒</div>':st==='done'?'<div style="font-size:10px">✓</div>':''}`;
-    if(st!=='fut'&&st!=='lk') div.onclick=()=>jumpVideoEp(i);
-    strip.appendChild(div);
-  });
-  const cur=strip.children[showProg.current_ep||0]; if(cur)cur.scrollIntoView({block:'nearest',inline:'center'});
-}
-
-async function jumpVideoEp(i) {
-  const st=epVideoState(i);
-  if(st==='lk'){sh('videoDayDone').style.display='block';sh('videoControls').style.display='none';renderDaydone('videoDaydoneCard','video');startDayTimer('video');return;}
-  if(st==='fut') return;
-  sh('videoDayDone').style.display='none'; sh('videoControls').style.display='block';
-  await loadVideoEpisode(i);
-}
-
-async function loadVideoEpisode(i) {
-  const ep = activeShow.episodes[i];
-  showProg.current_ep = i;
-  await saveProgress('show', activeShow.id, i, showProg.done_eps||[]);
-  const vid = sh('mainVideo');
-  vid.src = `${API}/api/shows/${activeShow.id}/episodes/${ep.episode_number}/video`;
-  vid.play().catch(()=>{});
-  vid.onended = ()=>{ if(i<activeShow.episodes.length-1) videoNext(); };
-  sh('videoTitle').textContent = ep.title;
-  sh('videoMeta').textContent  = `${activeShow.title} · Episode ${ep.episode_number}`;
-  sh('vEpCounter').textContent = `${i+1} / ${activeShow.episodes.length}`;
-  sh('vPrevBtn').disabled = i===0;
-  const nst = i+1<activeShow.episodes.length?epVideoState(i+1):null;
-  sh('vNextBtn').disabled = !nst||nst==='fut'||isEpDone();
-  renderVideoStrip(); updateVideoStats();
-}
-
-async function videoNext() {
-  const next = (showProg.current_ep||0)+1;
-  if(next>=activeShow.episodes.length) return;
-  const done=showProg.done_eps||[];
-  if(!done.includes(showProg.current_ep)) done.push(showProg.current_ep);
-  showProg.done_eps=done;
-  await markEpDone();
-  await saveProgress('show', activeShow.id, showProg.current_ep, done);
-  if(epVideoState(next)==='fut') return;
-  if(isDayDone()){const vid=sh('mainVideo');vid.pause();sh('videoDayDone').style.display='block';sh('videoControls').style.display='none';renderDaydone('videoDaydoneCard','video');startDayTimer('video');renderVideoStrip();return;}
-  const vid=sh('mainVideo');vid.pause();
-  await showVideoAd('Episode break', async()=>{ sh('videoDayDone').style.display='none';sh('videoControls').style.display='block'; await loadVideoEpisode(next); });
-}
-function videoPrev() { if((showProg.current_ep||0)>0) loadVideoEpisode((showProg.current_ep||0)-1); }
-
-function startVideoTick() {
-  clearInterval(tickTimer);
-  tickTimer=setInterval(async()=>{
-    const vid=sh('mainVideo');
-    if(sh('adOverlay').classList.contains('show')) return;
-    if(sh('videoDayDone').style.display!=='none') return;
-    if(vid.paused||vid.ended) return;
-    await tick(10); updateVideoStats(); updateTimerChip('video');
-    const adsHit=daily?.ads_hit||[];
-    for(const t of AD_TRIGGERS){
-      if(!adsHit.includes(t)&&(daily?.secs_watched||0)>=t){
-        await markAdHit(t); vid.pause();
-        const label=t===600?'10 minute break':t===1800?'30 minute break':'1 hour milestone';
-        await showVideoAd(label, async()=>{ await loadVideoEpisode(showProg.current_ep||0); startVideoTick(); });
-        return;
-      }
-    }
-    if(isDayDone()){clearInterval(tickTimer);vid.pause();sh('videoDayDone').style.display='block';sh('videoControls').style.display='none';renderDaydone('videoDaydoneCard','video');startDayTimer('video');renderVideoStrip();}
-  },10000);
-}
-
-function updateVideoStats() { updateDailyDisplay('v'); updateTimerChip('video'); }
-
-// ── Ad breaks ─────────────────────────────────────────────────
-async function fetchRandomAd() {
-  try { const r=await fetch(`${API}/api/ads/random`); return await r.json(); } catch { return null; }
-}
-
-// Timed ad modal (for reading)
-async function showTimedAd(context, afterFn) {
-  afterAdFn=afterFn;
-  const ad=await fetchRandomAd();
-  sh('adModalContext').textContent=context;
-  sh('adModalName').textContent=ad?ad.name:'Sponsor message';
-  const media=sh('adModalMedia'); media.innerHTML='';
-  const ph=document.createElement('div');ph.className='ad-modal-ph';ph.innerHTML=`<div class="icon">▶</div><div>${ad?ad.name:'Sponsor'}</div>`;
-  if(ad&&ad.url&&ad.type==='video'){
-    const vid=document.createElement('video');vid.src=ad.url;vid.autoplay=true;vid.muted=false;vid.playsInline=true;vid.style.cssText='width:100%;height:100%;object-fit:contain';
-    media.appendChild(vid);
-    vid.addEventListener('loadedmetadata',()=>startAdModalCountdown(Math.ceil(vid.duration)||15,()=>{vid.pause();vid.remove();media.appendChild(ph);finishAd();}));
-    vid.addEventListener('ended',()=>{clearInterval(adTimer);vid.remove();media.appendChild(ph);finishAd();});
-    vid.addEventListener('error',()=>{vid.remove();media.appendChild(ph);startAdModalCountdown(3,finishAd);});
-  } else if(ad&&ad.url&&ad.type==='image'){
-    const img=document.createElement('img');img.src=ad.url;img.style.cssText='max-width:100%;max-height:100%;object-fit:contain';
-    media.appendChild(img);startAdModalCountdown(15,()=>{img.remove();media.appendChild(ph);finishAd();});
-  } else { media.appendChild(ph); startAdModalCountdown(10,finishAd); }
-  sh('adModalBackdrop').classList.add('show');
-}
-
-function startAdModalCountdown(dur,onDone){
-  clearInterval(adTimer);let secs=dur;
-  const ring=sh('adModalRing'),count=sh('adModalCount'),circ=125.7;
-  const upd=()=>{ring.style.strokeDashoffset=circ*(1-secs/dur);count.textContent=secs;};upd();
-  adTimer=setInterval(()=>{secs--;upd();if(secs<=0){clearInterval(adTimer);onDone();}},1000);
-}
-
-// Video overlay ad
-async function showVideoAd(context, afterFn) {
-  afterAdFn=afterFn;
-  const ad=await fetchRandomAd();
-  sh('adBarName').textContent=ad?ad.name:'Sponsor';
-  sh('adOverlay').classList.add('show');
-  const wrap=sh('adMediaWrap');
-  wrap.querySelectorAll('video,img').forEach(el=>el.remove());
-  const ph=sh('adPlaceholder');
-  if(ad&&ad.url&&ad.type==='video'){
-    ph.style.display='none';
-    const vid=document.createElement('video');vid.src=ad.url;vid.autoplay=true;vid.muted=false;vid.playsInline=true;vid.style.cssText='max-width:100%;max-height:100%;object-fit:contain';
-    wrap.insertBefore(vid,null);
-    vid.addEventListener('loadedmetadata',()=>startVideoAdCountdown(Math.ceil(vid.duration)||15,()=>{vid.pause();vid.remove();ph.style.display='flex';finishVideoAd();}));
-    vid.addEventListener('ended',()=>{clearInterval(adTimer);vid.remove();ph.style.display='flex';finishVideoAd();});
-    vid.addEventListener('error',()=>{vid.remove();ph.style.display='flex';startVideoAdCountdown(3,finishVideoAd);});
-  } else if(ad&&ad.url){
-    ph.style.display='none';
-    const img=document.createElement('img');img.src=ad.url;img.style.cssText='max-width:100%;max-height:100%;object-fit:contain';
-    wrap.insertBefore(img,null);startVideoAdCountdown(15,()=>{img.remove();ph.style.display='flex';finishVideoAd();});
-  } else { ph.style.display='flex';startVideoAdCountdown(10,finishVideoAd); }
-}
-
-function startVideoAdCountdown(dur,onDone){
-  clearInterval(adTimer);let secs=dur;
-  const ring=sh('adRingMini'),count=sh('adBarCount'),circ=50.3;
-  const upd=()=>{ring.style.strokeDashoffset=circ*(1-secs/dur);count.textContent=secs;};upd();
-  adTimer=setInterval(()=>{secs--;upd();if(secs<=0){clearInterval(adTimer);onDone();}},1000);
-}
-
-function finishAd(){ sh('adModalBackdrop').classList.remove('show'); if(afterAdFn){afterAdFn();afterAdFn=null;} }
-function finishVideoAd(){ sh('adOverlay').classList.remove('show'); if(afterAdFn){afterAdFn();afterAdFn=null;} }
-
-// ── Day done ──────────────────────────────────────────────────
-function renderDaydone(cardId, context) {
-  const isEp = isEpDone()&&!isTimeDone();
-  const title = isEp ? "You've watched 6 episodes today!" : "That's your hour for today!";
-  const desc  = isEp ? "Come back tomorrow or earn extra episodes now." : "Timer resets at midnight, or earn more time now.";
-  sh(cardId).innerHTML = `
-    <i style="font-size:30px;color:var(--text-3)">🌙</i>
-    <h3>${title}</h3>
-    <p>${desc}</p>
-    <div class="daydone-timer" id="${cardId}Timer">—</div>
-    <p style="font-size:11px;color:var(--text-3);margin-bottom:14px">Time until automatic reset</p>
-    <div class="earn-grid">
-      <div class="earn-row"><div class="earn-row-info"><p>Watch an ad</p><span>+15 minutes</span></div><button class="ubtn acc" onclick="doEarn('ad','${context}')">Watch</button></div>
-      <div class="earn-row"><div class="earn-row-info"><p>Share</p><span>+30 minutes · +1 episode</span></div><button class="ubtn def" onclick="doEarn('share','${context}')">Share</button></div>
-      <div class="earn-row"><div class="earn-row-info"><p>Watch and share</p><span>+45 minutes · +2 episodes</span></div><button class="ubtn suc" onclick="doEarn('both','${context}')">Do both</button></div>
-    </div>`;
-  updateDayDoneTimer(cardId+'Timer');
-}
-function updateDayDoneTimer(id) {
-  const el=sh(id); if(!el)return;
-  const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);
-  const s=Math.floor((mid-now)/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
-  el.textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0');
-}
-function startDayTimer(context) {
-  clearInterval(dayTimer);
-  const cardId = context==='reader'?'readerDaydoneCard':'videoDaydoneCard';
-  dayTimer=setInterval(async()=>{
-    updateDayDoneTimer(cardId+'Timer');
-    const now=new Date();
-    if(now.getHours()===0&&now.getMinutes()===0){
-      await refreshDaily();
-      if(!isDayDone()){clearInterval(dayTimer);toast('New day! Timer reset.');goHome();}
-    }
-  },1000);
-}
-async function doEarn(action, context) {
-  await earn(action);
-  toast('Earned '+{ad:'+15 min',share:'+30 min · +1 ep',both:'+45 min · +2 eps'}[action]);
-  if(!isDayDone()){
-    clearInterval(dayTimer);
-    if(context==='reader'){showReaderSection('reader');await loadBookEpisode(bookProg.current_ep||0);startReadTick();}
-    else{sh('videoDayDone').style.display='none';sh('videoControls').style.display='block';await loadVideoEpisode(showProg.current_ep||0);startVideoTick();}
-  }
-}
-
-// ── Stats display ─────────────────────────────────────────────
-function updateDailyDisplay(prefix) {
-  const tl=effectiveTimeLimit(),secs=Math.min(daily?.secs_watched||0,tl),tp=(secs/tl)*100;
-  sh(prefix+'StatTime').textContent=Math.floor(secs/60)+' / '+Math.floor(tl/60)+' min';
-  const tf=sh(prefix+'StatTimeFill');tf.style.width=tp+'%';tf.className='stat-fill time'+(tp>=100?' full':tp>=80?' warn':'');
-  const el=effectiveEpLimit(),eps=Math.min(daily?.eps_today||0,el),ep=(eps/el)*100;
-  sh(prefix+'StatEps').textContent=eps+' / '+el;
-  sh(prefix+'StatEpsFill').style.width=ep+'%';
-  if(prefix==='r'){
-    sh('rAdFill').style.width=tp+'%';sh('rAdTime').textContent=Math.floor(secs/60)+' / '+Math.floor(tl/60)+' min';
-    AD_TRIGGERS.forEach((t,i)=>{const el=sh(['rm10','rm30','rm60'][i]);if(el)el.className='ad-marker'+((daily?.ads_hit||[]).includes(t)?' hit':'');});
-  }
-}
-function updateTimerChip(context) {
-  const chipId=context==='reader'?'readerTimerChip':'playerTimerChip';
-  const chip=sh(chipId);
+function updateTimerChip() {
+  const chip=g('timerChip');
   if(isEpDone()){chip.className='timer-chip lk';chip.textContent='🎬 6 episodes done';return;}
   if(isTimeDone()){chip.className='timer-chip lk';chip.textContent='🌙 Time up';return;}
-  const rem=Math.max(0,effectiveTimeLimit()-(daily?.secs_watched||0)),m=Math.floor(rem/60),s=rem%60;
+  const rem=Math.max(0,eTL()-(daily?.secs_watched||0)),m=Math.floor(rem/60),s=rem%60;
   chip.className=rem<600?'timer-chip warn':'timer-chip ok';
   chip.textContent='⏱ '+m+':'+String(s).padStart(2,'0')+' left';
 }
 
-// ── ADMIN ─────────────────────────────────────────────────────
-function openAdmin() { showPage('admin'); sh('adminLoginView').style.display='block'; sh('adminContentView').style.display='none'; sh('adminPassInput').value=''; sh('loginErr').style.display='none'; setTimeout(()=>sh('adminPassInput').focus(),100); }
-function adminLogout() { adminPass=null; goHome(); }
-async function checkAdminPass() {
-  const pass=sh('adminPassInput').value;
-  const r=await fetch(`${API}/api/admin/verify`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});
-  if(r.ok){adminPass=pass;sh('adminLoginView').style.display='none';sh('adminContentView').style.display='block';loadAdminData();}
-  else{sh('loginErr').style.display='block';sh('adminPassInput').value='';}
+// ── Tick ──────────────────────────────────────────────────────
+function startTick() {
+  clearInterval(tickTimer);
+  tickTimer=setInterval(async()=>{
+    if(g('adSection').style.display!=='none'||g('dayDoneSection').style.display!=='none')return;
+    await tick(10); updateStats(); updateTimerChip();
+    const hits=daily?.ads_hit||[];
+    for(const t of AD_TRIGGERS){
+      if(!hits.includes(t)&&(daily?.secs_watched||0)>=t){
+        await markAdHit(t);clearInterval(tickTimer);
+        const label=t===600?'10 minute break':t===1800?'30 minute break':'1 hour milestone';
+        g('adContext').textContent=label;showReaderSection('ad');
+        showAd(async()=>{showReaderSection('reader');startTick();updateStats();});
+        return;
+      }
+    }
+    if(isDayDone()){clearInterval(tickTimer);showReaderSection('daydone');startDayTimer();renderStrip();}
+  },10000);
 }
-async function loadAdminData() { await Promise.all([loadAdminBooks(),loadAdminShows(),loadAdminAds()]); }
 
-// BOOKS admin
-let pendingBookFile=null, pendingBookCoverFile=null;
-function previewBookCover(inp){
+// ── Day done ──────────────────────────────────────────────────
+function startDayTimer(){
+  if(isEpDone()&&!isTimeDone()){g('dayDoneTitle').textContent="You've read 6 episodes today!";g('dayDoneDesc').textContent="Come back tomorrow or earn extra episodes now.";}
+  else{g('dayDoneTitle').textContent="That's your hour for today!";g('dayDoneDesc').textContent="Your timer resets automatically tomorrow, or earn more now.";}
+  clearInterval(dayTimer);updateDayDoneTimer();
+  dayTimer=setInterval(async()=>{
+    updateDayDoneTimer();
+    const now=new Date();
+    if(now.getHours()===0&&now.getMinutes()===0){await refreshDaily();if(!isDayDone()){clearInterval(dayTimer);showReaderSection('reader');renderStrip();updateStats();updateTimerChip();loadEpisode(bookProg.current_ep||0);startTick();toast('New day! Timer reset.');}}
+  },1000);
+}
+function updateDayDoneTimer(){
+  const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);
+  const s=Math.floor((mid-now)/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
+  g('dayDoneTimer').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0');
+}
+
+// ── Ad break ──────────────────────────────────────────────────
+async function showAd(afterFn) {
+  afterAdFn=afterFn;
+  let ad=null;
+  try{const r=await fetch(`${API}/api/ads/random`);if(r.ok)ad=await r.json();}catch(e){}
+  g('adName').textContent=ad?ad.name:'Sponsor message';
+  g('adDesc').textContent=ad?ad.description||'':'Thank you for reading with Pagebound.';
+  const wrap=g('adVideoWrap'),ph=g('adPlaceholder');
+  wrap.querySelectorAll('video,img:not(#adPlaceholder img)').forEach(el=>el.remove());
+  if(ad&&ad.url&&ad.type==='video'){
+    ph.style.display='none';
+    const vid=document.createElement('video');vid.src=ad.url;vid.autoplay=true;vid.muted=false;vid.playsInline=true;
+    vid.style.cssText='width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0';
+    wrap.insertBefore(vid,g('adCountdownOverlay'));
+    vid.addEventListener('loadedmetadata',()=>startAdCountdown(Math.ceil(vid.duration)||15,()=>{vid.pause();vid.remove();ph.style.display='flex';finishAd();}));
+    vid.addEventListener('ended',()=>{clearInterval(adTimer);vid.remove();ph.style.display='flex';finishAd();});
+    vid.addEventListener('error',()=>{vid.remove();ph.style.display='flex';startAdCountdown(3,finishAd);});
+  } else if(ad&&ad.url){
+    ph.style.display='none';
+    const img=document.createElement('img');img.src=ad.url;
+    img.style.cssText='width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0';
+    wrap.insertBefore(img,g('adCountdownOverlay'));
+    startAdCountdown(15,()=>{img.remove();ph.style.display='flex';finishAd();});
+  } else {
+    g('adPlaceholderName').textContent=ad?ad.name:'Sponsor message';
+    ph.style.display='flex';startAdCountdown(10,finishAd);
+  }
+}
+function startAdCountdown(dur,onDone){
+  clearInterval(adTimer);let secs=dur;
+  const ring=g('adRingSmall'),count=g('adCountNum'),circ=50.3;
+  const upd=()=>{ring.style.strokeDashoffset=circ*(1-secs/dur);count.textContent=secs;};upd();
+  adTimer=setInterval(()=>{secs--;upd();if(secs<=0){clearInterval(adTimer);onDone();}},1000);
+}
+function finishAd(){if(afterAdFn){afterAdFn();afterAdFn=null;}}
+
+// ── Admin — Books ─────────────────────────────────────────────
+function previewCover(inp){
   if(!inp.files||!inp.files[0])return;
-  pendingBookCoverFile=inp.files[0];
+  pendingCoverFile=inp.files[0];
   const url=URL.createObjectURL(inp.files[0]);
-  sh('bookCoverPreview').src=url;sh('bookCoverPreview').style.display='block';
-  sh('bookCoverEmpty').style.display='none';sh('bookCoverChange').style.display='block';
+  g('coverThumb').src=url;g('coverThumb').style.display='block';
+  g('coverEmpty').style.display='none';g('coverChange').style.display='block';
 }
 function bookFileChosen(inp){
   if(!inp.files||!inp.files[0])return;
   pendingBookFile=inp.files[0];
-  sh('bookFileRow').classList.add('sel');sh('bookFileLabel').textContent=inp.files[0].name;updateBookBtn();
+  g('bookFileRow').classList.add('selected');
+  g('bookFileLabel').textContent=inp.files[0].name;
+  g('bookFileSub').textContent=Math.round(inp.files[0].size/1024)+' KB · ready to add';
+  updateBookBtn();
 }
-function updateBookBtn(){sh('addBookBtn').disabled=!(sh('bookTitleIn').value.trim()&&sh('bookAuthorIn').value.trim()&&pendingBookFile);}
-async function addBook(){
-  const title=sh('bookTitleIn').value.trim(),author=sh('bookAuthorIn').value.trim(),wpe=sh('bookWpeIn').value;
-  if(!title||!author||!pendingBookFile){toast('Fill title, author and choose a file');return;}
-  const pb=sh('bookProgBar'),pf=sh('bookProgFill');pb.classList.add('show');pf.style.width='10%';
-  const fd=new FormData();fd.append('book',pendingBookFile);fd.append('title',title);fd.append('author',author);fd.append('wordsPerEpisode',wpe);fd.append('adminPass',adminPass);
-  const r=await fetch(`${API}/api/books/upload`,{method:'POST',headers:{'x-admin-pass':adminPass},body:fd});
-  pf.style.width='70%';
-  const d=await r.json();
-  if(d.error){pb.classList.remove('show');toast('Error: '+d.error);return;}
-  if(pendingBookCoverFile){const cfd=new FormData();cfd.append('cover',pendingBookCoverFile);await fetch(`${API}/api/books/${d.bookId}/cover`,{method:'POST',headers:{'x-admin-pass':adminPass},body:cfd});}
-  pf.style.width='100%';setTimeout(()=>pb.classList.remove('show'),400);
-  sh('bookTitleIn').value='';sh('bookAuthorIn').value='';sh('bookFileIn').value='';
-  sh('bookFileRow').classList.remove('sel');sh('bookFileLabel').textContent='No file chosen';
-  sh('bookCoverPreview').style.display='none';sh('bookCoverEmpty').style.display='flex';sh('bookCoverChange').style.display='none';
-  pendingBookFile=null;pendingBookCoverFile=null;sh('addBookBtn').disabled=true;
-  loadAdminBooks();toast(`"${title}" added — ${d.totalEpisodes} episodes`);
+function updateBookBtn(){g('addBookBtn').disabled=!(g('bookTitleIn').value.trim()&&g('bookAuthorIn').value.trim()&&pendingBookFile);}
+
+async function readFileAsText(file) {
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='txt'||file.type==='text/plain'){
+    return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Could not read file'));r.readAsText(file,'utf-8');});
+  }
+  if(ext==='epub'||file.type==='application/epub+zip'){
+    if(!window.JSZip)throw new Error('EPUB support not loaded, please refresh and try again');
+    const buf=await file.arrayBuffer();
+    const zip=await window.JSZip.loadAsync(buf);
+    const containerXml=await zip.file('META-INF/container.xml')?.async('text')||'';
+    let opfPath='OEBPS/content.opf';
+    const m=containerXml.match(/full-path="([^"]+\.opf)"/);
+    if(m)opfPath=m[1];
+    const opfText=await zip.file(opfPath)?.async('text')||'';
+    const basePath=opfPath.includes('/')?opfPath.split('/').slice(0,-1).join('/')+'/' :'';
+    const idrefs=[...opfText.matchAll(/itemref[^>]+idref="([^"]+)"/g)].map(m=>m[1]);
+    const idToHref={};
+    for(const m of opfText.matchAll(/item[^>]+id="([^"]+)"[^>]+href="([^"]+)"/g))idToHref[m[1]]=m[2];
+    const hrefs=idrefs.map(id=>idToHref[id]).filter(Boolean);
+    const allHrefs=hrefs.length?hrefs:Object.values(idToHref).filter(h=>/\.html?|\.xhtml/.test(h));
+    let txt='';
+    for(const href of allHrefs){
+      let html='';
+      for(const p of[basePath+href,href]){try{html=await zip.file(p)?.async('text')||'';if(html)break;}catch{}}
+      if(!html)continue;
+      const clean=html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
+        .replace(/<br\s*\/?>/gi,'\n').replace(/<\/p>/gi,'\n\n').replace(/<\/h[1-6]>/gi,'\n\n')
+        .replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+        .replace(/\n{3,}/g,'\n\n').trim();
+      if(clean)txt+=clean+'\n\n';
+    }
+    if(!txt.trim())throw new Error('Could not extract text from EPUB. Try converting to .txt using Calibre.');
+    return txt;
+  }
+  if(ext==='pdf'||file.type==='application/pdf'){
+    if(!window.pdfjsLib)throw new Error('PDF support not loaded, please refresh and try again');
+    const buf=await file.arrayBuffer();
+    const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
+    let txt='';
+    for(let i=1;i<=pdf.numPages;i++){const page=await pdf.getPage(i);const tc=await page.getTextContent();txt+=tc.items.map(it=>it.str).join(' ')+'\n\n';}
+    if(!txt.trim())throw new Error('Could not extract text from PDF. Try a text-based PDF or convert to .txt.');
+    return txt;
+  }
+  if(['docx','doc'].includes(ext)||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document'){
+    if(!window.mammoth)throw new Error('DOCX support not loaded, please refresh and try again');
+    const buf=await file.arrayBuffer();
+    const result=await window.mammoth.extractRawText({arrayBuffer:buf});
+    if(!result.value.trim())throw new Error('Could not extract text from DOCX.');
+    return result.value;
+  }
+  if(ext==='rtf'){
+    const txt=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Read failed'));r.readAsText(file,'utf-8');});
+    return txt.replace(/\\[a-z]+\d*\s?/g,' ').replace(/[{}\\]/g,' ').replace(/\s{2,}/g,' ').trim();
+  }
+  throw new Error('Unsupported format. Please use .txt, .epub, .pdf, .docx or .rtf');
 }
+
+async function addBook() {
+  const title=g('bookTitleIn').value.trim(),author=g('bookAuthorIn').value.trim();
+  if(!title||!author||!pendingBookFile){toast('Fill in title, author and choose a file');return;}
+  const pw=g('bookProgWrap'),pb=g('bookProgBar');
+  pw.classList.add('on');pb.style.width='10%';
+  try {
+    const text=await readFileAsText(pendingBookFile);
+    pb.style.width='40%';
+    await new Promise(r=>setTimeout(r,30));
+    // Upload to server as txt
+    const blob=new Blob([text],{type:'text/plain'});
+    const fd=new FormData();
+    fd.append('book',blob,'book.txt');
+    fd.append('title',title);fd.append('author',author);
+    fd.append('wordsPerEpisode',g('wpeSelect').value);
+    pb.style.width='60%';
+    const r=await fetch(`${API}/api/books/upload`,{method:'POST',headers:{'x-admin-pass':adminPass},body:fd});
+    const d=await r.json();
+    if(d.error){pw.classList.remove('on');toast('Error: '+d.error);return;}
+    if(pendingCoverFile){
+      const cfd=new FormData();cfd.append('cover',pendingCoverFile);
+      await fetch(`${API}/api/books/${d.bookId}/cover`,{method:'POST',headers:{'x-admin-pass':adminPass},body:cfd});
+    }
+    pb.style.width='100%';await new Promise(r=>setTimeout(r,300));pw.classList.remove('on');
+    // Reset form
+    g('bookTitleIn').value='';g('bookAuthorIn').value='';g('bookFileIn').value='';g('coverFileIn').value='';
+    g('coverThumb').style.display='none';g('coverEmpty').style.display='flex';g('coverChange').style.display='none';
+    g('bookFileRow').classList.remove('selected');g('bookFileLabel').textContent='No book file chosen';g('bookFileSub').textContent='Supports .txt, .epub, .pdf, .docx, .rtf';
+    g('addBookBtn').disabled=true;pendingBookFile=null;pendingCoverFile=null;
+    loadAdminBooks();toast('"'+title+'" added — '+d.totalEpisodes+' episodes');
+  } catch(e){pw.classList.remove('on');toast('Error: '+e.message);}
+}
+
 async function loadAdminBooks(){
-  const r=await fetch(`${API}/api/books`);const books=await r.json();
-  sh('bookCountBadge').textContent=books.length;
-  sh('adminBookList').innerHTML=books.length?books.map(b=>`<div class="list-row"><div class="list-num">${books.indexOf(b)+1}</div><div class="list-info"><p>${b.title}</p><span>${b.author||''} · ${b.total_episodes} episodes</span></div><button class="del-btn" onclick="deleteBook('${b.id}')">🗑</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No books yet.</p>';
+  try{
+    const r=await fetch(`${API}/api/books`);const books=await r.json();
+    g('bookCountBadge').textContent=books.length+' book'+(books.length!==1?'s':'');
+    g('adminBookList').innerHTML=books.length?books.map((b,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${b.title}</p><span>${b.author||''} · ${b.total_episodes} episodes</span></div><button class="del-btn" onclick="deleteBook('${b.id}')">🗑</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No books yet.</p>';
+  }catch(e){}
 }
-async function deleteBook(id){if(!confirm('Remove this book?'))return;await fetch(`${API}/api/books/${id}`,{method:'DELETE',headers:adminHeaders()});loadAdminBooks();toast('Book removed');}
+async function deleteBook(id){
+  if(!confirm('Remove this book?'))return;
+  await fetch(`${API}/api/books/${id}`,{method:'DELETE',headers:{'x-admin-pass':adminPass}});
+  loadAdminBooks();toast('Book removed');
+}
 
-// SHOWS admin
-let pendingEpFile2=null,pendingShowThumbFile=null;
-function previewShowThumb(inp){
-  if(!inp.files||!inp.files[0])return;
-  pendingShowThumbFile=inp.files[0];
-  const url=URL.createObjectURL(inp.files[0]);
-  sh('showThumbPreview').src=url;sh('showThumbPreview').style.display='block';
-  sh('showThumbEmpty').style.display='none';sh('showThumbChange').style.display='block';
-}
-function epFileChosen(inp){
-  if(!inp.files||!inp.files[0])return;
-  pendingEpFile2=inp.files[0];
-  const mb=Math.round(inp.files[0].size/1024/1024*10)/10;
-  const warn=sh('videoSizeWarn');
-  if(mb>50){warn.classList.add('show');sh('videoSizeVal').textContent=mb+' MB';}else warn.classList.remove('show');
-  sh('epFileRow').classList.add('sel');sh('epFileLabel').textContent=inp.files[0].name;updateEpBtn();
-}
-function updateEpBtn(){sh('addEpBtn').disabled=!(sh('showTitleIn').value.trim()&&sh('epTitleIn').value.trim()&&pendingEpFile2);}
-async function addEpisode(){
-  const showTitle=sh('showTitleIn').value.trim(),creator=sh('showCreatorIn').value.trim(),epTitle=sh('epTitleIn').value.trim();
-  if(!showTitle||!epTitle||!pendingEpFile2){toast('Fill show title, episode title and choose a video');return;}
-  // Create or get show
-  const sr=await fetch(`${API}/api/shows`,{method:'POST',headers:adminHeaders(),body:JSON.stringify({title:showTitle,creator})});
-  const show=await sr.json();
-  // Upload thumbnail if present
-  if(pendingShowThumbFile){const tfd=new FormData();tfd.append('thumb',pendingShowThumbFile);await fetch(`${API}/api/shows/${show.id}/thumb`,{method:'POST',headers:{'x-admin-pass':adminPass},body:tfd});}
-  // Upload episode
-  const pb=sh('epProgBar'),pf=sh('epProgFill');pb.classList.add('show');pf.style.width='10%';
-  const fd=new FormData();fd.append('video',pendingEpFile2);fd.append('title',epTitle);
-  const r=await fetch(`${API}/api/shows/${show.id}/episodes`,{method:'POST',headers:{'x-admin-pass':adminPass},body:fd});
-  pf.style.width='90%';
-  const d=await r.json();if(d.error){pb.classList.remove('show');toast('Error: '+d.error);return;}
-  pf.style.width='100%';setTimeout(()=>pb.classList.remove('show'),400);
-  sh('epTitleIn').value='';sh('epFileIn').value='';sh('epFileRow').classList.remove('sel');sh('epFileLabel').textContent='No video file chosen';
-  sh('showThumbPreview').style.display='none';sh('showThumbEmpty').style.display='flex';sh('showThumbChange').style.display='none';
-  sh('videoSizeWarn').classList.remove('show');pendingEpFile2=null;pendingShowThumbFile=null;sh('addEpBtn').disabled=true;
-  loadAdminShows();toast(`Episode ${d.episodeNumber} added to "${showTitle}"`);
-}
-async function loadAdminShows(){
-  const r=await fetch(`${API}/api/shows`);const shows=await r.json();
-  sh('showCountBadge').textContent=shows.length;
-  sh('adminShowList').innerHTML=shows.length?shows.map(s=>`<div class="list-row"><div class="list-num">${shows.indexOf(s)+1}</div><div class="list-info"><p>${s.title}</p><span>${s.creator||''} · ${s.episodeCount} episodes</span></div><button class="del-btn" onclick="deleteShow('${s.id}')">🗑</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No shows yet.</p>';
-}
-async function deleteShow(id){if(!confirm('Remove this show?'))return;await fetch(`${API}/api/shows/${id}`,{method:'DELETE',headers:adminHeaders()});loadAdminShows();toast('Show removed');}
-
-// ADS admin
-let pendingAdFile2=null;
+// ── Admin — Ads ───────────────────────────────────────────────
 function adFileChosen(inp){
   if(!inp.files||!inp.files[0])return;
-  pendingAdFile2=inp.files[0];
+  pendingAdFile=inp.files[0];
   const mb=Math.round(inp.files[0].size/1024/1024*10)/10;
-  const warn=sh('adSizeWarn');
-  if(mb>50){warn.classList.add('show');sh('adSizeVal').textContent=mb+' MB';}else warn.classList.remove('show');
-  sh('adFileRow').classList.add('sel');sh('adFileLabel').textContent=inp.files[0].name;sh('addAdBtn').disabled=false;
+  const warn=g('sizeWarn');
+  if(mb>50){warn.classList.add('show');g('sizeWarnVal').textContent=mb+' MB';}else warn.classList.remove('show');
+  g('adFileRow').classList.add('selected');g('adFileLabel').textContent=inp.files[0].name;
+  g('addAdBtn').disabled=false;
 }
 async function addAd(){
-  if(!pendingAdFile2){toast('Choose a file first');return;}
-  const name=sh('adNameIn').value.trim()||pendingAdFile2.name;
-  const fd=new FormData();fd.append('ad',pendingAdFile2);fd.append('name',name);
+  if(!pendingAdFile){toast('Choose a file first');return;}
+  const name=g('adNameIn').value.trim()||pendingAdFile.name;
+  const fd=new FormData();fd.append('ad',pendingAdFile);fd.append('name',name);
   const r=await fetch(`${API}/api/ads`,{method:'POST',headers:{'x-admin-pass':adminPass},body:fd});
   const d=await r.json();if(d.error){toast('Error: '+d.error);return;}
-  sh('adNameIn').value='';sh('adFileIn').value='';sh('adFileRow').classList.remove('sel');sh('adFileLabel').textContent='No file chosen';
-  sh('adSizeWarn').classList.remove('show');pendingAdFile2=null;sh('addAdBtn').disabled=true;
-  loadAdminAds();toast('"'+name+'" added to rotation');
+  g('adNameIn').value='';g('adFileIn').value='';g('adFileRow').classList.remove('selected');
+  g('adFileLabel').textContent='No ad file chosen';g('addAdBtn').disabled=true;g('sizeWarn').classList.remove('show');
+  pendingAdFile=null;loadAdminAds();toast('"'+name+'" added to rotation');
 }
 async function loadAdminAds(){
-  const r=await fetch(`${API}/api/ads`);const ads=await r.json();
-  sh('adCountBadge').textContent=ads.length+' / 10';
-  sh('adminAdList').innerHTML=ads.length?ads.map(a=>`<div class="list-row"><div class="list-num">${ads.indexOf(a)+1}</div><div class="list-info"><p>${a.name}</p><span>${a.type}</span></div><button class="del-btn" onclick="deleteAd('${a.id}')">🗑</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No ads yet.</p>';
+  try{
+    const r=await fetch(`${API}/api/ads`);const ads=await r.json();
+    g('adCountBadge').textContent=ads.length+' / 10';
+    g('adminAdList').innerHTML=ads.length?ads.map((a,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${a.name}</p><span>${a.type}</span></div><button class="del-btn" onclick="deleteAd('${a.id}')">🗑</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No ads yet.</p>';
+  }catch(e){}
 }
-async function deleteAd(id){await fetch(`${API}/api/ads/${id}`,{method:'DELETE',headers:adminHeaders()});loadAdminAds();toast('Ad removed');}
+async function deleteAd(id){
+  await fetch(`${API}/api/ads/${id}`,{method:'DELETE',headers:{'x-admin-pass':adminPass}});
+  loadAdminAds();toast('Ad removed');
+}
+
+// ── Analytics ─────────────────────────────────────────────────
+async function loadAnalytics(){
+  g('analyticsContent').innerHTML='<div style="text-align:center;padding:40px;color:var(--text-3)">Loading...</div>';
+  try{
+    const r=await fetch(`${API}/api/analytics`,{headers:{'x-admin-pass':adminPass}});
+    if(!r.ok){g('analyticsContent').innerHTML='<div style="text-align:center;padding:40px;color:var(--danger)">Could not load analytics.</div>';return;}
+    const d=await r.json();
+    const fmtTime=s=>s>=3600?Math.round(s/360)/10+'h':Math.round(s/60)+'m';
+    const fmtDate=s=>s?s.slice(5):''; // MM-DD
+
+    // Build bar chart data
+    const last14=[];const now=new Date();
+    for(let i=13;i>=0;i--){const d2=new Date(now);d2.setDate(d2.getDate()-i);last14.push(d2.toISOString().split('T')[0]);}
+    const visMap={};(d.dailyVisitors||[]).forEach(v=>visMap[v.date]=v.visitors);
+    const maxVis=Math.max(1,...Object.values(visMap));
+
+    const readMap={};(d.dailyReading||[]).forEach(v=>readMap[v.date]=Math.round(v.secs/60));
+    const maxRead=Math.max(1,...Object.values(readMap));
+
+    g('analyticsContent').innerHTML=`
+      <div class="analytics-grid">
+        <div class="stat-card"><div class="stat-card-val">${d.totalVisitors.toLocaleString()}</div><div class="stat-card-label">Total visitors</div><div class="stat-card-sub">+${d.todayVisitors} today</div></div>
+        <div class="stat-card"><div class="stat-card-val">${d.weekVisitors}</div><div class="stat-card-label">This week</div><div class="stat-card-sub">Unique sessions</div></div>
+        <div class="stat-card"><div class="stat-card-val">${d.totalReaders.toLocaleString()}</div><div class="stat-card-label">Readers</div><div class="stat-card-sub">+${d.todayReaders} today</div></div>
+        <div class="stat-card"><div class="stat-card-val">${fmtTime(d.avgSecsPerDay)}</div><div class="stat-card-label">Avg session</div><div class="stat-card-sub">Per reading day</div></div>
+        <div class="stat-card"><div class="stat-card-val">${fmtTime(d.todaySecsRead)}</div><div class="stat-card-label">Read today</div><div class="stat-card-sub">${fmtTime(d.totalSecsRead)} total</div></div>
+        <div class="stat-card"><div class="stat-card-val">${d.todayEpsDone}</div><div class="stat-card-label">Episodes done today</div><div class="stat-card-sub">${d.totalEpsDone} total</div></div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-title">📈 Daily visitors — last 14 days</div>
+        <div class="bar-chart">
+          ${last14.map(date=>`<div class="bar-col">
+            <div class="bar accent" style="height:${Math.max(4,((visMap[date]||0)/maxVis)*70)}px" title="${visMap[date]||0} visitors on ${date}"></div>
+            <div class="bar-label">${fmtDate(date)}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div class="chart-title">📖 Daily reading time (minutes) — last 14 days</div>
+        <div class="bar-chart">
+          ${last14.map(date=>`<div class="bar-col">
+            <div class="bar" style="height:${Math.max(4,((readMap[date]||0)/maxRead)*70)}px;background:var(--success-l);border-top:2px solid var(--success)" title="${readMap[date]||0} minutes on ${date}"></div>
+            <div class="bar-label">${fmtDate(date)}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+
+      ${d.popularBooks.length?`
+      <div class="chart-wrap">
+        <div class="chart-title">🏆 Most read books</div>
+        ${d.popularBooks.map((b,i)=>`<div class="popular-row">
+          <div class="popular-rank">${i+1}</div>
+          <div class="popular-info"><p>${b.title}</p><span>${b.author||'Unknown'} · ${b.readers} readers</span></div>
+          <div class="popular-stat">${fmtTime(b.total_secs||0)}</div>
+        </div>`).join('')}
+      </div>`:''}
+
+      <div class="chart-wrap">
+        <div class="chart-title">👥 Recent sessions</div>
+        <table class="sessions-table">
+          <thead><tr><th>Session</th><th>Visits</th><th>Read today</th><th>Episodes</th><th>Last seen</th></tr></thead>
+          <tbody>
+            ${d.recentSessions.map(s=>{
+              const isToday=new Date(s.last_seen*1000).toDateString()===new Date().toDateString();
+              return `<tr>
+                <td>${isToday?'<span class="online-dot"></span>':''}<span style="font-family:monospace;font-size:11px">${s.id.slice(0,8)}...</span></td>
+                <td>${s.total_visits}</td>
+                <td>${s.secs_watched?fmtTime(s.secs_watched):'-'}</td>
+                <td>${s.eps_today||0}</td>
+                <td>${new Date(s.last_seen*1000).toLocaleDateString()}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }catch(e){g('analyticsContent').innerHTML='<div style="text-align:center;padding:40px;color:var(--danger)">Error loading analytics: '+e.message+'</div>';}
+}
 
 boot();
 </script>
