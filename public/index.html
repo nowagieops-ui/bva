@@ -245,15 +245,9 @@ body{font-family:var(--sans);background:#f7f5f0;color:var(--text);min-height:100
 <body>
 <div class="shell">
 
-  <!-- TOPBAR -->
-  <div class="topbar">
-    <div class="brand" onclick="goHome()">Page<em>bound</em></div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <div class="prog-wrap" id="progWrap" style="margin:0;display:none">
-        <div class="prog-bar-outer" style="width:120px"><div class="prog-bar-inner" id="progBar" style="width:0%"></div></div>
-      </div>
-      <button class="topbtn" id="adminToggleBtn" onclick="toggleAdmin()"><i class="ti ti-shield" aria-hidden="true"></i> Admin</button>
-    </div>
+  <!-- Progress bar only (admin button removed) -->
+  <div id="progWrap" style="display:none;padding:8px 0 0">
+    <div class="prog-bar-outer"><div class="prog-bar-inner" id="progBar" style="width:0%"></div></div>
   </div>
 
   <!-- HOME -->
@@ -261,7 +255,6 @@ body{font-family:var(--sans);background:#f7f5f0;color:var(--text);min-height:100
 
     <!-- Empty state — shown when no books -->
     <div id="emptyHero" class="empty-hero" style="display:none">
-      <div class="empty-hero-eyebrow">📚 Welcome to Pagebound</div>
       <h1 class="empty-hero-title">Reading is better<br>when it feels like a <em>treat</em></h1>
       <p class="empty-hero-sub">Short daily episodes. Real books. Zero overwhelm. We break every book into bite-sized chapters so you actually finish what you start.</p>
       <div class="empty-hero-pills">
@@ -496,7 +489,12 @@ async function boot() {
     localStorage.setItem('pb_session', sessionId);
     await refreshDaily();
   } catch(e) { console.warn('Session init failed:', e); }
-  loadBooks();
+  // Route based on URL path
+  if (window.location.pathname === '/admin') {
+    toggleAdmin();
+  } else {
+    loadBooks();
+  }
 }
 
 function g(id) { return document.getElementById(id); }
@@ -507,9 +505,9 @@ function adH() { return { 'x-session-id': sessionId, 'x-admin-pass': adminPass, 
 
 // ── Pages ─────────────────────────────────────────────────────
 function showPage(id) { ['pageHome','pageReader','pageAdmin'].forEach(p=>g(p).style.display='none'); g(id).style.display='block'; }
-function goHome() { clearInterval(tickTimer);clearInterval(dayTimer);clearInterval(adTimer); activeBook=null;currentBookId=null; showPage('pageHome'); loadBooks(); }
-function toggleAdmin() { showPage('pageAdmin'); g('adminToggleBtn').innerHTML='<i class="ti ti-x" aria-hidden="true"></i> Close'; clearInterval(tickTimer); g('adminLoginView').style.display='block'; g('adminPanelView').style.display='none'; g('adminPassInput').value=''; g('loginErr').style.display='none'; setTimeout(()=>g('adminPassInput').focus(),100); }
-function adminLogout() { adminPass=null; goHome(); }
+function goHome() { clearInterval(tickTimer);clearInterval(dayTimer);clearInterval(adTimer); activeBook=null;currentBookId=null; if(window.location.pathname=='/admin'){return;} showPage('pageHome'); loadBooks(); }
+function toggleAdmin() { showPage('pageAdmin'); clearInterval(tickTimer); g('adminLoginView').style.display='block'; g('adminPanelView').style.display='none'; g('adminPassInput').value=''; g('loginErr').style.display='none'; setTimeout(()=>g('adminPassInput').focus(),100); }
+function adminLogout() { adminPass=null; window.location.href='/'; }
 
 async function checkAdminPass() {
   const pass = g('adminPassInput').value;
