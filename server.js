@@ -378,8 +378,9 @@ app.get('/api/analytics', admin, async (req,res) => {
 });
 
 // ── Frontend ──────────────────────────────────────────────────
-// /admin serves the same index.html — JS handles the route
-app.get('/admin', (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
-app.get('*', (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
+// All these serve index.html — JS router handles the rest
+app.get('/admin',    (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
+app.get('/book/:id', (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
+app.get('*',         (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
 
 initDB().then(() => app.listen(PORT, () => console.log(`Pagebound on port ${PORT}`)));
