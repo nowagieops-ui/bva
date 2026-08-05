@@ -10,6 +10,29 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+<style>
+/* Screenshot prevention */
+.reader-body, .reader-wrap {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* CSS screenshot deterrent — overlays on print/screenshot */
+@media print {
+  body * { display: none !important; }
+  body::after {
+    display: block !important;
+    content: "This content is protected. Unauthorized reproduction is not permitted.";
+    font-size: 24px;
+    text-align: center;
+    padding: 40px;
+    color: #333;
+  }
+}
+</style>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -41,6 +64,8 @@ html,body{
   color:var(--ink);
   min-height:100vh;
   -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+  max-width:100vw;
 }
 
 /* ── FULL WIDTH LAYOUT ── */
@@ -174,11 +199,11 @@ html,body{
 }
 .book-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
-  gap:16px;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:20px;
 }
 @media(max-width:500px){
-  .book-grid{grid-template-columns:repeat(2,1fr);gap:14px;}
+  .book-grid{grid-template-columns:repeat(2,1fr);gap:12px;}
 }
 .book-card{
   background:var(--card);
@@ -241,8 +266,8 @@ html,body{
 
 /* ── READER ── */
 #pageReader{width:100%;}
-.reader-wrap{max-width:700px;margin:0 auto;padding:24px 24px 80px;}
-@media(max-width:600px){.reader-wrap{padding:16px 16px 60px;}}
+.reader-wrap{max-width:700px;margin:0 auto;padding:24px 24px 80px;width:100%;overflow-x:hidden;}
+@media(max-width:600px){.reader-wrap{padding:12px 14px 60px;}}
 
 .back-btn{
   display:inline-flex;align-items:center;gap:6px;
@@ -256,8 +281,8 @@ html,body{
 /* EP STRIP */
 .ep-strip-wrap{
   background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px 14px;margin-bottom:16px;
-  overflow:hidden;
+  border-radius:var(--r);padding:12px 12px;margin-bottom:14px;
+  overflow:hidden;max-width:100%;
 }
 .ep-strip-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px}
 .ep-strip{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
@@ -285,11 +310,11 @@ html,body{
 }
 .stat-card{
   background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px 14px;
-  min-width:0;
+  border-radius:var(--r);padding:12px 12px;
+  min-width:0;overflow:hidden;
 }
-.stat-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stat-val{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-label{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-val{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stat-bar{height:3px;background:var(--bg);border-radius:2px;margin-top:8px;overflow:hidden}
 .stat-fill{height:100%;border-radius:2px;transition:width .4s}
 .stat-fill.t{background:var(--green)}
@@ -315,23 +340,23 @@ html,body{
 .ad-fill.full{background:var(--red)}
 .ad-marker{position:absolute;top:-3px;width:2px;height:11px;background:var(--blue);border-radius:1px;transform:translateX(-50%)}
 .ad-marker.hit{background:var(--ink3)}
-.ad-ticks{display:flex;gap:0;margin-top:6px;position:relative}
+.ad-ticks{display:flex;gap:0;margin-top:6px;position:relative;height:14px;overflow:hidden;}
 .ad-tick{font-size:10px;color:var(--ink3);position:absolute;transform:translateX(-50%)}
 
 /* READER HEADER */
 .reader-header{
   display:flex;align-items:flex-start;justify-content:space-between;
-  gap:12px;margin-bottom:6px;
+  gap:10px;margin-bottom:6px;flex-wrap:wrap;
 }
 .reader-ep-title{
-  font-family:var(--serif);font-size:20px;font-weight:400;
+  font-family:var(--serif);font-size:18px;font-weight:400;
   line-height:1.3;flex:1;min-width:0;
 }
 .timer-badge{
   flex-shrink:0;
   display:inline-flex;align-items:center;gap:5px;
   font-size:12px;font-weight:600;
-  padding:5px 11px;border-radius:100px;
+  padding:5px 10px;border-radius:100px;
   white-space:nowrap;
 }
 .timer-badge.ok{background:var(--green-l);color:var(--green)}
@@ -347,12 +372,22 @@ html,body{
   font-size:18px;
   line-height:1.9;
   color:var(--ink);
+  word-break:break-word;
+  overflow-wrap:break-word;
+}
+@media(max-width:600px){
+  .reader-body{font-size:16px;line-height:1.85;}
+  .reader-ep-title{font-size:17px;}
+  .ep-pill{width:30px;height:30px;font-size:10px;}
+  .reader-nav{gap:8px;}
+  .nav-btn{padding:8px 14px;font-size:13px;}
 }
 .reader-body p{margin-bottom:1.4em}
 .reader-nav{
   display:flex;align-items:center;justify-content:space-between;
-  gap:12px;margin-top:48px;padding-top:20px;
+  gap:8px;margin-top:40px;padding-top:18px;
   border-top:1px solid var(--line);
+  flex-wrap:nowrap;
 }
 .reader-nav-ep{font-size:13px;color:var(--ink3);font-weight:500}
 .nav-btn{
@@ -1230,12 +1265,36 @@ async function showAd(afterFn) {
   wrap.querySelectorAll('video,img:not(#adPlaceholder img)').forEach(el=>el.remove());
   if(ad&&ad.url&&ad.type==='video'){
     ph.style.display='none';
-    const vid=document.createElement('video');vid.src=ad.url;vid.autoplay=true;vid.muted=false;vid.playsInline=true;
-    vid.style.cssText='width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0';
+    const vid=document.createElement('video');
+    vid.src=ad.url;
+    vid.muted=true; // start muted so autoplay works in all browsers
+    vid.autoplay=true;
+    vid.playsInline=true;
+    vid.controls=false;
+    vid.style.cssText='width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0;background:#000';
     wrap.insertBefore(vid,g('adCountdownOverlay'));
-    vid.addEventListener('loadedmetadata',()=>startAdCountdown(Math.ceil(vid.duration)||15,()=>{vid.pause();vid.remove();ph.style.display='flex';finishAd();}));
+    vid.load();
+    // Try to unmute after play starts
+    vid.addEventListener('playing',()=>{
+      try{ vid.muted=false; }catch(e){}
+    });
+    vid.addEventListener('loadedmetadata',()=>{
+      const dur=Math.ceil(vid.duration)||15;
+      vid.play().catch(()=>{}); // force play
+      startAdCountdown(dur,()=>{vid.pause();vid.remove();ph.style.display='flex';finishAd();});
+    });
     vid.addEventListener('ended',()=>{clearInterval(adTimer);vid.remove();ph.style.display='flex';finishAd();});
-    vid.addEventListener('error',()=>{vid.remove();ph.style.display='flex';startAdCountdown(3,finishAd);});
+    vid.addEventListener('error',(e)=>{
+      console.warn('Ad video error:',e);
+      vid.remove();ph.style.display='flex';
+      startAdCountdown(10,finishAd); // still count down, just no video
+    });
+    // Fallback if metadata never loads after 3s
+    setTimeout(()=>{
+      if(vid.readyState===0&&vid.parentNode){
+        vid.remove();ph.style.display='flex';startAdCountdown(10,finishAd);
+      }
+    },3000);
   } else if(ad&&ad.url){
     ph.style.display='none';
     const img=document.createElement('img');img.src=ad.url;
@@ -1502,5 +1561,88 @@ async function loadAnalytics(){
 
 boot();
 </script>
+
+<script>
+// ── Screenshot & screen recording deterrent ───────────────────
+
+// 1. Blur content when window loses focus (PrintScreen often triggers this)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    const rb = document.getElementById('readerBody');
+    if (rb) rb.style.filter = 'blur(12px)';
+  } else {
+    const rb = document.getElementById('readerBody');
+    if (rb) rb.style.filter = '';
+  }
+});
+
+// 2. Detect PrintScreen key and blur instantly
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'PrintScreen') {
+    const rb = document.getElementById('readerBody');
+    if (!rb) return;
+    rb.style.filter = 'blur(12px)';
+    // Copy blank to clipboard to ruin screenshot
+    navigator.clipboard?.writeText('').catch(()=>{});
+    setTimeout(() => { rb.style.filter = ''; }, 2000);
+  }
+});
+
+// 3. Block common shortcuts: Ctrl+P (print), Ctrl+S (save)
+document.addEventListener('keydown', (e) => {
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && (e.key === 'p' || e.key === 's' || e.key === 'u')) {
+    e.preventDefault();
+    return false;
+  }
+  // Block F12 devtools
+  if (e.key === 'F12') {
+    e.preventDefault();
+    return false;
+  }
+});
+
+// 4. Block right click on reader content
+document.addEventListener('contextmenu', (e) => {
+  if (document.getElementById('pageReader')?.style.display !== 'none') {
+    e.preventDefault();
+    return false;
+  }
+});
+
+// 5. CSS blur overlay on the reader page using the Page Visibility API
+// When screen capture software often triggers visibility changes
+let blurTimeout;
+window.addEventListener('blur', () => {
+  blurTimeout = setTimeout(() => {
+    const rb = document.getElementById('readerBody');
+    if (rb && document.getElementById('pageReader')?.style.display !== 'none') {
+      rb.style.filter = 'blur(8px)';
+    }
+  }, 300);
+});
+window.addEventListener('focus', () => {
+  clearTimeout(blurTimeout);
+  const rb = document.getElementById('readerBody');
+  if (rb) rb.style.filter = '';
+});
+
+// 6. Detect screen capture API (Chrome only, but catches it where supported)
+if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+  const origGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getDisplayMedia = async (opts) => {
+    const rb = document.getElementById('readerBody');
+    if (rb) rb.style.filter = 'blur(12px)';
+    const stream = await origGetDisplayMedia(opts);
+    stream.getTracks().forEach(track => {
+      track.addEventListener('ended', () => {
+        if (rb) rb.style.filter = '';
+      });
+    });
+    return stream;
+  };
+}
+</script>
+
 </body>
 </html>
