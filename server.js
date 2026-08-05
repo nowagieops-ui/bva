@@ -271,12 +271,22 @@ app.delete('/api/books/:id', admin, async (req,res) => {
 });
 
 // ── Ads ───────────────────────────────────────────────────────
-app.post('/api/ads', admin, adUp.single('ad'), async (req,res) => {
-  if(!req.file) return res.status(400).json({error:'No file'});
-  const type=req.file.mimetype.startsWith('video')?'video':'image';
-  const id=uuid();
-  await db.run('INSERT INTO ads (id,name,file,type) VALUES (?,?,?,?)',id,req.body.name||req.file.originalname,req.file.filename,type);
-  res.json({id,name:req.body.name||req.file.originalname});
+app.post('/api/ads', admin, (req,res,next) => {
+  adUp.single('ad')(req,res,(err)=>{
+    if(err){
+      if(err.code==='LIMIT_FILE_SIZE') return res.status(413).json({error:'File too large — max 500 MB'});
+      return res.status(400).json({error:err.message||'Upload failed'});
+    }
+    next();
+  });
+}, async (req,res) => {
+  try {
+    if(!req.file) return res.status(400).json({error:'No file received'});
+    const type=req.file.mimetype.startsWith('video')?'video':'image';
+    const id=uuid();
+    await db.run('INSERT INTO ads (id,name,file,type) VALUES (?,?,?,?)',id,req.body.name||req.file.originalname,req.file.filename,type);
+    res.json({id,name:req.body.name||req.file.originalname});
+  } catch(e){ res.status(500).json({error:e.message}); }
 });
 app.get('/api/ads', async (_,res) => {
   const ads=await db.all('SELECT * FROM ads WHERE active=1 ORDER BY created_at DESC');
