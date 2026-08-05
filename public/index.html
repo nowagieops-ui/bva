@@ -3,11 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pagebound — Read More, Together</title>
+<title>Pagebound</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
@@ -16,386 +15,815 @@
 :root{
   --sans:'Inter',system-ui,sans-serif;
   --serif:'Fraunces',Georgia,serif;
-  --radius:10px;
-  --text:#1a1814;--text-2:#6b6760;--text-3:#a8a49e;
-  --accent:#2c5ee8;--accent-l:#eef3ff;--accent-d:#1a3fa0;
-  --success:#1a7a3c;--success-l:#e8faf0;--success-b:#7ecfa0;
-  --warn:#8a5500;--warn-l:#fff4e0;
-  --danger:#c0392b;--danger-l:#fff0ee;--danger-b:#e74c3c;
-  --s1:#f0ede7;--s2:#fff;
-  --border:rgba(0,0,0,.09);--border-strong:rgba(0,0,0,.18);
+  --ink:#111110;
+  --ink2:#6b6760;
+  --ink3:#a8a49e;
+  --bg:#faf9f7;
+  --card:#ffffff;
+  --line:rgba(0,0,0,.08);
+  --line2:rgba(0,0,0,.15);
+  --blue:#2563eb;
+  --blue-l:#eff6ff;
+  --blue-b:#93c5fd;
+  --green:#16a34a;
+  --green-l:#f0fdf4;
+  --green-b:#86efac;
+  --amber:#b45309;
+  --amber-l:#fffbeb;
+  --red:#dc2626;
+  --red-l:#fef2f2;
+  --r:12px;
+  --r-sm:8px;
 }
-body{font-family:var(--sans);background:#f7f5f0;color:var(--text);min-height:100vh}
-.shell{max-width:700px;margin:0 auto;padding:16px 16px 80px}
+html,body{
+  font-family:var(--sans);
+  background:var(--bg);
+  color:var(--ink);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
 
-/* TOPBAR */
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:0.5px solid var(--border);margin-bottom:24px;gap:12px}
-.brand{font-family:var(--serif);font-size:20px;font-weight:400;cursor:pointer;letter-spacing:-.3px}
-.brand em{color:var(--accent);font-style:italic}
-.topbtn{padding:6px 13px;border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--sans);border:.5px solid var(--border-strong);background:transparent;color:var(--text);display:flex;align-items:center;gap:5px;transition:all .12s}
-.topbtn:hover{background:var(--s1)}
-.topbtn.danger{background:var(--danger-l);border-color:var(--danger-b);color:var(--danger)}
+/* ── FULL WIDTH LAYOUT ── */
+.app{
+  width:100%;
+  min-height:100vh;
+}
+.inner{
+  max-width:960px;
+  margin:0 auto;
+  padding:0 24px;
+}
+@media(max-width:600px){
+  .inner{padding:0 16px;}
+}
 
-/* EMPTY STATE */
-.empty-hero{padding:60px 20px 48px;text-align:center}
-.empty-hero-eyebrow{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:20px}
-.empty-hero-title{font-family:var(--serif);font-size:clamp(32px,6vw,48px);font-weight:300;line-height:1.2;color:var(--text);margin-bottom:16px}
-.empty-hero-title em{font-style:italic;color:var(--accent)}
-.empty-hero-sub{font-size:16px;color:var(--text-2);line-height:1.75;max-width:420px;margin:0 auto 32px}
-.empty-hero-pills{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:40px}
-.pill{display:flex;align-items:center;gap:6px;background:var(--s2);border:.5px solid var(--border-strong);border-radius:100px;padding:7px 16px;font-size:13px;color:var(--text-2)}
-.pill i{color:var(--accent);font-size:14px}
-.empty-divider{height:.5px;background:var(--border);margin:0 auto 40px;max-width:80px}
-.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:48px}
-.feature{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:20px;text-align:left}
-.feature-icon{font-size:24px;margin-bottom:10px}
-.feature-title{font-size:13px;font-weight:600;margin-bottom:5px}
-.feature-desc{font-size:12px;color:var(--text-2);line-height:1.6}
-.empty-cta{font-family:var(--serif);font-size:18px;font-weight:300;font-style:italic;color:var(--text-3);text-align:center}
+/* ── HOME ── */
+#pageHome{width:100%;}
 
-/* LIBRARY */
-.section-label{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px}
-.book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-bottom:24px}
-.book-card{background:var(--s2);border:.5px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:all .15s}
-.book-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 16px rgba(44,94,232,.1)}
-.book-cover{height:160px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:var(--s1)}
+/* EMPTY HERO */
+.hero{
+  width:100%;
+  padding:80px 0 64px;
+  text-align:center;
+  background:linear-gradient(180deg,#ffffff 0%,var(--bg) 100%);
+  border-bottom:1px solid var(--line);
+  margin-bottom:0;
+}
+.hero-kicker{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--blue);
+  background:var(--blue-l);
+  border:1px solid var(--blue-b);
+  border-radius:100px;
+  padding:5px 14px;
+  margin-bottom:24px;
+}
+.hero h1{
+  font-family:var(--serif);
+  font-size:clamp(36px,6vw,60px);
+  font-weight:300;
+  line-height:1.1;
+  color:var(--ink);
+  margin-bottom:20px;
+  letter-spacing:-1px;
+}
+.hero h1 em{font-style:italic;color:var(--blue);}
+.hero-sub{
+  font-size:clamp(15px,2vw,18px);
+  color:var(--ink2);
+  line-height:1.75;
+  max-width:480px;
+  margin:0 auto 40px;
+}
+.hero-pills{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  justify-content:center;
+  margin-bottom:56px;
+}
+.hero-pill{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:var(--card);
+  border:1px solid var(--line2);
+  border-radius:100px;
+  padding:8px 18px;
+  font-size:13px;
+  font-weight:500;
+  color:var(--ink2);
+  box-shadow:0 1px 3px rgba(0,0,0,.04);
+}
+.hero-pill svg{width:16px;height:16px;color:var(--blue);flex-shrink:0}
+.features-row{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+  max-width:700px;
+  margin:0 auto;
+}
+@media(max-width:600px){.features-row{grid-template-columns:1fr;max-width:340px;}}
+.feat{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--r);
+  padding:20px;
+  text-align:left;
+}
+.feat-icon{
+  width:36px;height:36px;border-radius:var(--r-sm);
+  background:var(--blue-l);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:12px;
+}
+.feat-icon svg{width:18px;height:18px;color:var(--blue)}
+.feat h3{font-size:13px;font-weight:600;margin-bottom:5px}
+.feat p{font-size:12px;color:var(--ink2);line-height:1.6}
+.hero-foot{
+  margin-top:40px;
+  font-family:var(--serif);
+  font-size:17px;
+  font-weight:300;
+  font-style:italic;
+  color:var(--ink3);
+}
+
+/* LIBRARY SECTION */
+.library{
+  padding:40px 0 60px;
+}
+.lib-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:24px;
+}
+.section-title{
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--ink3);
+}
+.book-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
+  gap:20px;
+}
+@media(max-width:500px){
+  .book-grid{grid-template-columns:repeat(2,1fr);gap:14px;}
+}
+.book-card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--r);
+  overflow:hidden;
+  cursor:pointer;
+  transition:transform .15s,box-shadow .15s,border-color .15s;
+}
+.book-card:hover{
+  transform:translateY(-3px);
+  box-shadow:0 8px 24px rgba(0,0,0,.09);
+  border-color:var(--blue-b);
+}
+.book-cover{
+  aspect-ratio:3/4;
+  background:linear-gradient(135deg,#e8e4dc 0%,#d4cfc7 100%);
+  display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;
+}
 .book-cover img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
-.book-cover-placeholder{font-size:42px;z-index:1}
-.book-card-body{padding:10px 12px 12px}
-.book-card-title{font-size:13px;font-weight:500;line-height:1.4;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.book-card-author{font-size:11px;color:var(--text-3)}
-.book-card-meta{display:flex;align-items:center;justify-content:space-between;margin-top:7px;flex-wrap:wrap;gap:4px}
-.book-card-eps{font-size:10px;color:var(--text-2);background:var(--s1);border-radius:4px;padding:2px 6px}
-.continue-badge{font-size:10px;font-weight:500;background:var(--success-l);color:var(--success);border-radius:4px;padding:2px 6px}
-.book-card-progress{height:3px;background:var(--s1);border-radius:2px;margin-top:8px;overflow:hidden}
-.book-card-progress-fill{height:100%;background:var(--accent);border-radius:2px}
+.book-cover-icon{opacity:.3}
+.book-cover-icon svg{width:48px;height:48px;color:#6b6760}
+.book-body{padding:14px}
+.book-title{font-size:14px;font-weight:600;line-height:1.35;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.book-author{font-size:12px;color:var(--ink3);margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.book-footer{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.ep-badge{
+  font-size:11px;font-weight:500;
+  background:var(--bg);border:1px solid var(--line2);
+  border-radius:6px;padding:3px 8px;color:var(--ink2);
+}
+.continue-pill{
+  font-size:11px;font-weight:500;
+  background:var(--green-l);color:var(--green);
+  border-radius:6px;padding:3px 8px;
+}
+.book-progress{height:2px;background:var(--bg);border-radius:2px;margin-top:10px;overflow:hidden}
+.book-progress-fill{height:100%;background:var(--blue);border-radius:2px;transition:width .4s}
 
-/* READER */
-.back-btn{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);cursor:pointer;margin-bottom:16px;background:none;border:none;font-family:var(--sans);padding:0}
-.back-btn:hover{color:var(--text)}
-.ep-legend{display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap}
-.leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-2)}
-.leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
-.ep-strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;scrollbar-width:thin}
-.ep-pill{flex-shrink:0;width:38px;height:38px;border-radius:8px;border:.5px solid var(--border);background:var(--s1);font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-2);transition:all .15s;position:relative;flex-direction:column;gap:1px}
-.ep-pill:hover:not(.lk):not(.future){border-color:var(--accent);color:var(--accent)}
-.ep-pill.done{background:var(--success-l);border-color:var(--success-b);color:var(--success)}
-.ep-pill.cur{background:var(--accent-l);border-color:var(--accent);color:var(--accent);font-weight:500}
-.ep-pill.lk{opacity:.5;cursor:default}
-.ep-pill.future{opacity:.25;cursor:default}
-.ep-pill .lock-ico{font-size:9px}
+/* ── READER ── */
+#pageReader{width:100%;}
+.reader-wrap{max-width:700px;margin:0 auto;padding:24px 24px 80px;}
+@media(max-width:600px){.reader-wrap{padding:16px 16px 60px;}}
 
-.daily-stats{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-.stat-chip{flex:1;min-width:120px;background:var(--s2);border:.5px solid var(--border);border-radius:var(--radius);padding:9px 12px}
-.stat-chip-label{font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
-.stat-chip-val{font-size:14px;font-weight:500}
-.stat-chip-bar{height:4px;background:var(--s1);border-radius:2px;margin-top:6px;overflow:hidden}
-.stat-chip-fill{height:100%;border-radius:2px;transition:width .4s}
-.stat-chip-fill.time{background:var(--success)}
-.stat-chip-fill.time.warn{background:var(--warn)}
-.stat-chip-fill.time.full{background:var(--danger)}
-.stat-chip-fill.eps{background:var(--accent)}
+.back-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:13px;font-weight:500;color:var(--ink2);
+  cursor:pointer;background:none;border:none;font-family:var(--sans);
+  padding:0;margin-bottom:20px;
+}
+.back-btn:hover{color:var(--ink)}
+.back-btn svg{width:16px;height:16px}
 
-.session-bar{background:var(--s2);border:.5px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px}
-.session-bar-label{font-size:12px;color:var(--text-2);margin-bottom:5px;display:flex;justify-content:space-between}
-.session-bar-label span{font-weight:500;color:var(--text)}
-.session-rail{height:6px;background:var(--s1);border-radius:4px;overflow:hidden}
-.session-rail-wrap{position:relative}
-.session-fill{height:100%;border-radius:4px;transition:width 1s linear}
-.session-fill.ok{background:var(--success)}
-.session-fill.warn{background:var(--warn)}
-.session-fill.full{background:var(--danger)}
-.ad-marker{position:absolute;top:-2px;width:2px;height:10px;background:var(--accent);border-radius:1px;transform:translateX(-50%)}
-.ad-marker.hit{background:var(--text-3)}
-.ad-markers-label{display:flex;gap:12px;margin-top:5px}
-.ad-markers-label span{font-size:10px;color:var(--text-3)}
+/* EP STRIP */
+.ep-strip-wrap{
+  background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);padding:12px 14px;margin-bottom:16px;
+  overflow:hidden;
+}
+.ep-strip-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px}
+.ep-strip{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.ep-strip::-webkit-scrollbar{display:none}
+.ep-pill{
+  flex-shrink:0;width:34px;height:34px;border-radius:var(--r-sm);
+  border:1px solid var(--line2);background:var(--bg);
+  font-size:11px;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--ink3);transition:all .12s;position:relative;flex-direction:column;gap:1px;
+}
+.ep-pill:hover:not(.lk):not(.future){border-color:var(--blue);color:var(--blue);background:var(--blue-l)}
+.ep-pill.done{background:var(--green-l);border-color:var(--green-b);color:var(--green)}
+.ep-pill.done svg{width:12px;height:12px}
+.ep-pill.cur{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+.ep-pill.lk{opacity:.45;cursor:default}
+.ep-pill.future{opacity:.2;cursor:default}
 
-.reader-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}
-.reader-title{font-family:var(--serif);font-size:16px;font-weight:400;flex:1}
-.timer-chip{font-size:12px;padding:4px 10px;border-radius:6px;font-weight:500;white-space:nowrap}
-.timer-chip.ok{background:var(--success-l);color:var(--success)}
-.timer-chip.warn{background:var(--warn-l);color:var(--warn)}
-.timer-chip.lk{background:var(--danger-l);color:var(--danger)}
-.progress-rail{height:2px;background:var(--s1);border-radius:2px;margin-bottom:24px}
-.progress-fill{height:2px;background:var(--accent);border-radius:2px;transition:width .5s}
-.reader-body{font-family:var(--serif);font-size:17px;line-height:1.9;color:var(--text)}
+/* STATS BAR */
+.stats-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin-bottom:14px;
+}
+.stat-card{
+  background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);padding:12px 14px;
+  min-width:0;
+}
+.stat-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-val{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-bar{height:3px;background:var(--bg);border-radius:2px;margin-top:8px;overflow:hidden}
+.stat-fill{height:100%;border-radius:2px;transition:width .4s}
+.stat-fill.t{background:var(--green)}
+.stat-fill.t.warn{background:var(--amber)}
+.stat-fill.t.full{background:var(--red)}
+.stat-fill.e{background:var(--blue)}
+
+/* AD SCHEDULE */
+.ad-schedule{
+  background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);padding:12px 14px;margin-bottom:14px;
+}
+.ad-schedule-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;
+}
+.ad-schedule-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.ad-schedule-time{font-size:11px;font-weight:500;color:var(--ink2)}
+.ad-rail-wrap{position:relative}
+.ad-rail{height:5px;background:var(--bg);border-radius:3px;overflow:hidden}
+.ad-fill{height:100%;border-radius:3px;background:var(--green);transition:width 1s linear}
+.ad-fill.warn{background:var(--amber)}
+.ad-fill.full{background:var(--red)}
+.ad-marker{position:absolute;top:-3px;width:2px;height:11px;background:var(--blue);border-radius:1px;transform:translateX(-50%)}
+.ad-marker.hit{background:var(--ink3)}
+.ad-ticks{display:flex;gap:0;margin-top:6px;position:relative}
+.ad-tick{font-size:10px;color:var(--ink3);position:absolute;transform:translateX(-50%)}
+
+/* READER HEADER */
+.reader-header{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:12px;margin-bottom:6px;
+}
+.reader-ep-title{
+  font-family:var(--serif);font-size:20px;font-weight:400;
+  line-height:1.3;flex:1;min-width:0;
+}
+.timer-badge{
+  flex-shrink:0;
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:12px;font-weight:600;
+  padding:5px 11px;border-radius:100px;
+  white-space:nowrap;
+}
+.timer-badge.ok{background:var(--green-l);color:var(--green)}
+.timer-badge.warn{background:var(--amber-l);color:var(--amber)}
+.timer-badge.lk{background:var(--red-l);color:var(--red)}
+.timer-badge svg{width:13px;height:13px;flex-shrink:0}
+.progress-rail{height:2px;background:var(--line);border-radius:2px;margin:12px 0 28px}
+.progress-fill{height:2px;background:var(--blue);border-radius:2px;transition:width .5s}
+
+/* READER BODY */
+.reader-body{
+  font-family:var(--serif);
+  font-size:18px;
+  line-height:1.9;
+  color:var(--ink);
+}
 .reader-body p{margin-bottom:1.4em}
-.reader-nav{display:flex;align-items:center;justify-content:space-between;margin-top:32px;padding-top:18px;border-top:.5px solid var(--border)}
-.reader-nav span{font-size:12px;color:var(--text-3)}
-.navbtn{padding:7px 16px;border-radius:var(--radius);font-size:13px;font-family:var(--sans);cursor:pointer}
-.navbtn.def{border:.5px solid var(--border-strong);background:transparent;color:var(--text)}
-.navbtn.acc{border:.5px solid var(--accent);background:var(--accent-l);color:var(--accent);font-weight:500}
-.navbtn:disabled{opacity:.35;cursor:default}
+.reader-nav{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;margin-top:48px;padding-top:20px;
+  border-top:1px solid var(--line);
+}
+.reader-nav-ep{font-size:13px;color:var(--ink3);font-weight:500}
+.nav-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:9px 20px;border-radius:var(--r);
+  font-size:14px;font-weight:500;cursor:pointer;
+  font-family:var(--sans);border:1px solid var(--line2);
+  background:transparent;color:var(--ink);transition:all .12s;
+}
+.nav-btn:hover{background:var(--bg)}
+.nav-btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.nav-btn.primary:hover{background:#1d4ed8}
+.nav-btn:disabled{opacity:.35;cursor:default}
+.nav-btn svg{width:15px;height:15px}
 
 /* AD BREAK */
-.ad-backdrop{background:rgba(0,0,0,.52);border-radius:12px;padding:20px;display:flex;align-items:center;justify-content:center;min-height:280px;margin-bottom:16px}
-.ad-card-inner{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:0;max-width:380px;width:100%;text-align:center;overflow:hidden}
-.ad-top-bar{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:.5px solid var(--border)}
-.ad-eyebrow{font-size:10px;font-weight:500;letter-spacing:.08em;color:var(--text-3);text-transform:uppercase}
-.ad-context{font-size:11px;color:var(--accent);background:var(--accent-l);border-radius:5px;padding:2px 8px;font-weight:500}
-.ad-video-wrap{position:relative;width:100%;background:#000;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
-.ad-video-wrap video,.ad-video-wrap img{width:100%;height:100%;object-fit:contain;display:block}
-.ad-placeholder{width:100%;aspect-ratio:16/9;background:var(--s1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-3)}
-.ad-placeholder i{font-size:32px}
-.ad-countdown-overlay{position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.65);color:#fff;border-radius:20px;padding:4px 10px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px}
-.ad-countdown-ring{width:18px;height:18px;flex-shrink:0}
-.ad-info{padding:14px 16px;text-align:left}
-.ad-name{font-size:14px;font-weight:500;margin-bottom:3px}
-.ad-desc{font-size:12px;color:var(--text-2);line-height:1.5}
+.ad-wrap{
+  background:#000;border-radius:var(--r);overflow:hidden;
+  margin-bottom:16px;position:relative;
+}
+.ad-video-zone{
+  width:100%;aspect-ratio:16/9;
+  display:flex;align-items:center;justify-content:center;
+  background:#111;position:relative;overflow:hidden;
+}
+.ad-video-zone video,.ad-video-zone img{
+  width:100%;height:100%;object-fit:contain;display:block;
+  position:absolute;inset:0;
+}
+.ad-ph{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  color:rgba(255,255,255,.3);
+}
+.ad-ph svg{width:40px;height:40px}
+.ad-ph span{font-size:13px}
+.ad-countdown-pill{
+  position:absolute;bottom:12px;right:12px;z-index:5;
+  background:rgba(0,0,0,.65);backdrop-filter:blur(4px);
+  color:#fff;border-radius:100px;
+  padding:5px 12px;font-size:12px;font-weight:600;
+  display:flex;align-items:center;gap:7px;
+}
+.ad-countdown-ring{width:16px;height:16px;flex-shrink:0}
+.ad-countdown-ring circle{transform-origin:50% 50%}
+.ad-bottom-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;background:#1a1a1a;
+}
+.ad-bottom-label{
+  display:flex;align-items:center;gap:8px;
+}
+.ad-tag{
+  font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  background:#e53e3e;color:#fff;border-radius:4px;padding:2px 6px;
+}
+.ad-bottom-name{font-size:13px;color:#fff;font-weight:500}
+.ad-bottom-context{font-size:11px;color:rgba(255,255,255,.4)}
 
 /* DAY DONE */
-.daydone-card{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:28px 24px;text-align:center}
-.daydone-card h3{font-family:var(--serif);font-size:20px;font-weight:400;margin:10px 0 8px}
-.daydone-card p{font-size:13px;color:var(--text-2);line-height:1.65;margin-bottom:6px}
-.daydone-timer{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--accent);margin:10px 0 18px;font-family:var(--sans)}
-.earn-grid{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
-.earn-row{display:flex;align-items:center;justify-content:space-between;background:var(--s1);border-radius:var(--radius);padding:10px 14px;gap:12px}
-.earn-row-info p{font-size:13px;font-weight:500;text-align:left}
-.earn-row-info span{font-size:11px;color:var(--text-2);display:block;text-align:left}
-.ubtn{padding:7px 14px;border-radius:var(--radius);font-size:12px;cursor:pointer;font-family:var(--sans);font-weight:500;white-space:nowrap}
-.ubtn.acc{border:.5px solid var(--accent);background:var(--accent-l);color:var(--accent)}
-.ubtn.def{border:.5px solid var(--border-strong);background:transparent;color:var(--text)}
-.ubtn.success{border:.5px solid var(--success-b);background:var(--success-l);color:var(--success)}
+.daydone-wrap{max-width:700px;margin:0 auto;padding:16px;}
+.daydone-card{
+  background:var(--card);border:1px solid var(--line);
+  border-radius:16px;padding:36px 28px;text-align:center;
+}
+.daydone-icon{
+  width:56px;height:56px;border-radius:50%;
+  background:var(--amber-l);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 16px;
+}
+.daydone-icon svg{width:28px;height:28px;color:var(--amber)}
+.daydone-card h2{font-family:var(--serif);font-size:24px;font-weight:400;margin-bottom:8px}
+.daydone-card p{font-size:14px;color:var(--ink2);line-height:1.65;margin-bottom:6px}
+.daydone-timer{
+  font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;
+  color:var(--blue);margin:14px 0 22px;letter-spacing:-1px;
+}
+.earn-list{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+.earn-row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--bg);border:1px solid var(--line);
+  border-radius:var(--r);padding:12px 16px;gap:12px;
+}
+.earn-info{text-align:left}
+.earn-info strong{font-size:14px;font-weight:600;display:block;margin-bottom:2px}
+.earn-info span{font-size:12px;color:var(--ink2)}
+.earn-btn{
+  padding:8px 16px;border-radius:var(--r-sm);font-size:13px;font-weight:600;
+  cursor:pointer;font-family:var(--sans);white-space:nowrap;border:1px solid;
+  transition:all .12s;
+}
+.earn-btn.blue{background:var(--blue-l);border-color:var(--blue-b);color:var(--blue)}
+.earn-btn.blue:hover{background:var(--blue);color:#fff}
+.earn-btn.def{background:transparent;border-color:var(--line2);color:var(--ink)}
+.earn-btn.def:hover{background:var(--bg)}
+.earn-btn.green{background:var(--green-l);border-color:var(--green-b);color:var(--green)}
+.earn-btn.green:hover{background:var(--green);color:#fff}
 
-/* ADMIN */
-.admin-login-card{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:32px 28px;max-width:340px;margin:40px auto;text-align:center}
-.admin-login-card h3{font-family:var(--serif);font-size:20px;font-weight:400;margin-bottom:8px}
-.admin-login-card p{font-size:13px;color:var(--text-2);margin-bottom:20px}
-.admin-input{width:100%;padding:10px 12px;border-radius:var(--radius);border:.5px solid var(--border-strong);font-size:14px;background:var(--s1);color:var(--text);font-family:var(--sans);margin-bottom:10px;text-align:center;letter-spacing:3px}
-.admin-login-btn{width:100%;padding:10px;border-radius:var(--radius);font-size:13px;font-weight:500;border:.5px solid var(--accent);background:var(--accent-l);color:var(--accent);cursor:pointer;font-family:var(--sans)}
-.login-err{font-size:12px;color:var(--danger);margin-top:8px;display:none}
+/* ── ADMIN ── */
+.admin-shell{max-width:760px;margin:0 auto;padding:24px 24px 80px}
+@media(max-width:600px){.admin-shell{padding:16px 16px 60px}}
 
-.admin-tabs{display:flex;gap:2px;background:var(--s1);border-radius:var(--radius);padding:3px;margin-bottom:20px}
-.admin-tab{flex:1;padding:7px;font-size:13px;font-weight:500;border-radius:7px;cursor:pointer;border:none;background:transparent;color:var(--text-2);font-family:var(--sans);transition:all .15s;text-align:center}
-.admin-tab.on{background:var(--s2);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.admin-login-card{
+  max-width:380px;margin:60px auto;
+  background:var(--card);border:1px solid var(--line);
+  border-radius:16px;padding:36px 32px;text-align:center;
+}
+.admin-login-card h2{font-family:var(--serif);font-size:24px;font-weight:400;margin-bottom:8px}
+.admin-login-card p{font-size:14px;color:var(--ink2);margin-bottom:24px}
+.admin-input{
+  width:100%;padding:11px 14px;border-radius:var(--r);
+  border:1px solid var(--line2);font-size:16px;
+  background:var(--bg);color:var(--ink);font-family:var(--sans);
+  margin-bottom:12px;text-align:center;letter-spacing:4px;
+}
+.admin-input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-l)}
+.admin-login-btn{
+  width:100%;padding:11px;border-radius:var(--r);
+  font-size:14px;font-weight:600;
+  background:var(--blue);color:#fff;border:none;
+  cursor:pointer;font-family:var(--sans);transition:background .12s;
+}
+.admin-login-btn:hover{background:#1d4ed8}
+.login-err{font-size:13px;color:var(--red);margin-top:10px;display:none}
 
-.admin-section{background:var(--s2);border:.5px solid var(--border-strong);border-radius:12px;padding:18px;margin-bottom:16px}
-.admin-section-title{font-size:14px;font-weight:500;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
-.badge{font-size:11px;background:var(--accent-l);color:var(--accent);border-radius:5px;padding:2px 8px;font-weight:500}
-.badge.warn{background:var(--warn-l);color:var(--warn)}
-.add-label{font-size:12px;font-weight:500;color:var(--text-2);display:block;margin-bottom:5px}
-.field{width:100%;padding:8px 10px;border-radius:var(--radius);border:.5px solid var(--border-strong);font-size:13px;background:var(--s2);color:var(--text);font-family:var(--sans);margin-bottom:10px}
-.field:focus{outline:none;border-color:var(--accent)}
-.cover-row{display:flex;gap:14px;align-items:flex-start;margin-bottom:12px}
-.cover-box{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px}
-.cover-thumb{width:76px;height:100px;border-radius:8px;object-fit:cover;display:block;border:.5px solid var(--border)}
-.cover-empty{width:76px;height:100px;border-radius:8px;border:1.5px dashed var(--border-strong);display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--s1);transition:all .14s;flex-direction:column;gap:4px;font-size:10px;color:var(--text-3);text-align:center;padding:4px}
-.cover-empty:hover{border-color:var(--accent);background:var(--accent-l)}
-.cover-empty i{font-size:20px}
-.cover-change{font-size:10px;color:var(--accent);cursor:pointer;text-align:center}
-.file-pick-row{border:.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;display:flex;align-items:center;gap:10px;margin-bottom:10px;background:var(--s1);cursor:pointer}
-.file-pick-row.selected{border-color:var(--success-b);background:var(--success-l)}
-.file-pick-icon{font-size:18px;color:var(--text-3);flex-shrink:0}
-.file-pick-row.selected .file-pick-icon{color:var(--success)}
-.file-pick-info{flex:1;min-width:0}
-.file-pick-info p{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.file-pick-info span{font-size:11px;color:var(--text-3)}
-.file-pick-row.selected .file-pick-info span{color:var(--success)}
-.file-pick-btn{font-size:12px;font-weight:500;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:var(--sans);border:.5px solid var(--border-strong);background:transparent;color:var(--text);white-space:nowrap;flex-shrink:0}
-.big-btn{width:100%;padding:11px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;font-family:var(--sans);border:none;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s;margin-top:4px;background:var(--accent)}
-.big-btn.grn{background:var(--success)}
-.big-btn:hover{opacity:.88}
-.big-btn:disabled{opacity:.35;cursor:not-allowed}
-.list-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:.5px solid var(--border)}
+.admin-tabs{
+  display:flex;gap:2px;background:var(--card);
+  border:1px solid var(--line);border-radius:var(--r);padding:4px;
+  margin-bottom:20px;
+}
+.admin-tab{
+  flex:1;padding:8px 12px;font-size:13px;font-weight:500;
+  border-radius:var(--r-sm);cursor:pointer;border:none;
+  background:transparent;color:var(--ink2);font-family:var(--sans);
+  transition:all .12s;text-align:center;
+}
+.admin-tab.on{background:var(--blue);color:#fff;box-shadow:0 1px 4px rgba(37,99,235,.25)}
+
+.admin-card{
+  background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);padding:20px;margin-bottom:16px;
+}
+.admin-card-title{
+  font-size:13px;font-weight:600;margin-bottom:16px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.count-badge{
+  font-size:11px;font-weight:600;
+  background:var(--blue-l);color:var(--blue);
+  border-radius:6px;padding:3px 9px;
+}
+
+.add-label{font-size:12px;font-weight:600;color:var(--ink2);display:block;margin-bottom:6px;margin-top:2px}
+.field{
+  width:100%;padding:9px 12px;border-radius:var(--r-sm);
+  border:1px solid var(--line2);font-size:13px;
+  background:var(--bg);color:var(--ink);font-family:var(--sans);margin-bottom:10px;
+}
+.field:focus{outline:none;border-color:var(--blue)}
+
+.cover-row{display:flex;gap:16px;align-items:flex-start;margin-bottom:14px}
+.cover-box{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.cover-empty{
+  width:80px;height:108px;border-radius:var(--r-sm);
+  border:2px dashed var(--line2);display:flex;align-items:center;
+  justify-content:center;cursor:pointer;background:var(--bg);
+  transition:all .14s;flex-direction:column;gap:5px;
+  color:var(--ink3);font-size:11px;font-weight:500;text-align:center;padding:8px;
+}
+.cover-empty:hover{border-color:var(--blue);background:var(--blue-l);color:var(--blue)}
+.cover-empty svg{width:22px;height:22px}
+.cover-thumb{width:80px;height:108px;border-radius:var(--r-sm);object-fit:cover;border:1px solid var(--line);display:none}
+.cover-change{font-size:11px;font-weight:500;color:var(--blue);cursor:pointer;display:none;text-align:center}
+
+.file-row{
+  border:1px solid var(--line2);border-radius:var(--r);
+  padding:11px 14px;display:flex;align-items:center;gap:10px;
+  margin-bottom:10px;background:var(--bg);cursor:pointer;transition:all .12s;
+}
+.file-row:hover{border-color:var(--blue);background:var(--blue-l)}
+.file-row.sel{border-color:var(--green-b);background:var(--green-l)}
+.file-row-icon{flex-shrink:0;width:32px;height:32px;border-radius:var(--r-sm);background:var(--card);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center}
+.file-row-icon svg{width:16px;height:16px;color:var(--ink2)}
+.file-row.sel .file-row-icon{background:var(--green-l);border-color:var(--green-b)}
+.file-row.sel .file-row-icon svg{color:var(--green)}
+.file-row-info{flex:1;min-width:0}
+.file-row-info p{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-row-info span{font-size:11px;color:var(--ink3)}
+.file-row.sel .file-row-info span{color:var(--green)}
+.file-row-btn{font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--card);cursor:pointer;font-family:var(--sans);color:var(--ink);white-space:nowrap;flex-shrink:0}
+
+.big-btn{
+  width:100%;padding:12px;border-radius:var(--r);font-size:14px;font-weight:600;
+  cursor:pointer;font-family:var(--sans);border:none;
+  color:#fff;background:var(--blue);
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:all .12s;margin-top:4px;
+}
+.big-btn:hover{background:#1d4ed8}
+.big-btn.green{background:var(--green)}
+.big-btn.green:hover{background:#15803d}
+.big-btn:disabled{opacity:.4;cursor:not-allowed}
+.big-btn svg{width:16px;height:16px}
+
+.list-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .list-row:last-child{border-bottom:none}
-.list-num{width:24px;height:24px;border-radius:6px;background:var(--accent-l);color:var(--accent);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.list-num{width:26px;height:26px;border-radius:var(--r-sm);background:var(--blue-l);color:var(--blue);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .list-info{flex:1;min-width:0}
-.list-info p{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.list-info span{font-size:11px;color:var(--text-3)}
-.del-btn{font-size:11px;color:var(--danger);background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:4px;font-family:var(--sans)}
-.del-btn:hover{background:var(--danger-l)}
-.size-warn{font-size:11px;color:var(--warn);background:var(--warn-l);border-radius:6px;padding:6px 10px;margin-bottom:10px;display:none;line-height:1.5}
+.list-info p{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-info span{font-size:11px;color:var(--ink3)}
+.del-btn{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:var(--r-sm);font-family:var(--sans);font-weight:500}
+.del-btn:hover{background:var(--red-l)}
+
+.size-warn{font-size:12px;color:var(--amber);background:var(--amber-l);border:1px solid #fcd34d;border-radius:var(--r-sm);padding:8px 12px;margin-bottom:10px;display:none;line-height:1.5}
 .size-warn.show{display:block}
 
+.prog-wrap{display:none;margin-bottom:10px}
+.prog-wrap.on{display:block}
+.prog-bar-outer{height:4px;background:var(--bg);border-radius:2px;overflow:hidden}
+.prog-bar-inner{height:100%;background:var(--blue);border-radius:2px;transition:width .3s}
+
 /* ANALYTICS */
-.analytics-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px}
-.stat-card{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:16px}
-.stat-card-val{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;margin-bottom:3px}
-.stat-card-label{font-size:11px;color:var(--text-3);font-weight:500}
-.stat-card-sub{font-size:11px;color:var(--text-2);margin-top:4px}
-.chart-wrap{background:var(--s2);border:.5px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
-.chart-title{font-size:13px;font-weight:500;margin-bottom:14px;color:var(--text)}
+.analytics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+@media(max-width:500px){.analytics-grid{grid-template-columns:repeat(2,1fr)}}
+.metric-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.metric-val{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-1px;margin-bottom:2px}
+.metric-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.metric-sub{font-size:12px;color:var(--ink2);margin-top:4px}
+.chart-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
+.chart-title{font-size:13px;font-weight:600;margin-bottom:16px;color:var(--ink)}
 .bar-chart{display:flex;align-items:flex-end;gap:4px;height:80px}
 .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}
-.bar{width:100%;background:var(--accent-l);border-radius:4px 4px 0 0;transition:height .5s;min-height:2px;position:relative}
-.bar.accent{background:var(--accent)}
-.bar-label{font-size:9px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28px;text-align:center}
-.popular-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:.5px solid var(--border)}
-.popular-row:last-child{border-bottom:none}
-.popular-rank{width:20px;text-align:center;font-size:12px;font-weight:600;color:var(--text-3);flex-shrink:0}
-.popular-info{flex:1;min-width:0}
-.popular-info p{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.popular-info span{font-size:11px;color:var(--text-3)}
-.popular-stat{font-size:12px;font-weight:500;color:var(--accent);white-space:nowrap}
+.bar{width:100%;background:var(--blue-l);border-radius:4px 4px 0 0;min-height:3px;transition:height .5s}
+.bar.blue{background:var(--blue)}
+.bar.green{background:var(--green-l);border-top:2px solid var(--green)}
+.bar-lbl{font-size:9px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28px;text-align:center}
+.pop-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.pop-row:last-child{border-bottom:none}
+.pop-rank{width:22px;text-align:center;font-size:12px;font-weight:700;color:var(--ink3);flex-shrink:0}
+.pop-info{flex:1;min-width:0}
+.pop-info p{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pop-info span{font-size:11px;color:var(--ink3)}
+.pop-stat{font-size:12px;font-weight:600;color:var(--blue);white-space:nowrap}
 .sessions-table{width:100%;border-collapse:collapse;font-size:12px}
-.sessions-table th{text-align:left;padding:6px 8px;color:var(--text-3);font-weight:500;border-bottom:.5px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
-.sessions-table td{padding:7px 8px;border-bottom:.5px solid var(--border);color:var(--text-2)}
+.sessions-table th{text-align:left;padding:7px 8px;color:var(--ink3);font-weight:600;border-bottom:1px solid var(--line);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.sessions-table td{padding:8px 8px;border-bottom:1px solid var(--line);color:var(--ink2)}
 .sessions-table tr:last-child td{border-bottom:none}
-.online-dot{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;margin-right:4px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px}
 
-.prog-wrap{margin-bottom:16px;display:none}
-.prog-wrap.on{display:block}
-.prog-wrap p{font-size:13px;color:var(--text-2);margin-bottom:6px}
-.prog-bar-outer{height:5px;background:var(--s1);border-radius:3px;overflow:hidden}
-.prog-bar-inner{height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
-.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--text);color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:all .2s;pointer-events:none;z-index:9999;white-space:nowrap}
+.admin-logout-row{text-align:center;margin-top:20px}
+.logout-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 18px;border-radius:var(--r);font-size:13px;font-weight:500;
+  border:1px solid var(--red-l);background:var(--red-l);color:var(--red);
+  cursor:pointer;font-family:var(--sans);
+}
+.logout-btn:hover{background:var(--red);color:#fff}
+.logout-btn svg{width:15px;height:15px}
+
+/* TOAST */
+.toast{
+  position:fixed;bottom:20px;left:50%;
+  transform:translateX(-50%) translateY(12px);
+  background:var(--ink);color:#fff;
+  padding:10px 18px;border-radius:var(--r);
+  font-size:13px;font-weight:500;
+  opacity:0;transition:all .22s;
+  pointer-events:none;z-index:9999;
+  white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.2);
+}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
-<div class="shell">
+<div class="app">
 
-  <!-- Progress bar only (admin button removed) -->
-  <div id="progWrap" style="display:none;padding:8px 0 0">
-    <div class="prog-bar-outer"><div class="prog-bar-inner" id="progBar" style="width:0%"></div></div>
+<!-- ══ HOME ══════════════════════════════════════════════════ -->
+<div id="pageHome">
+
+  <div id="emptyHero" style="display:none">
+    <div class="hero">
+      <div class="inner">
+        <div class="hero-kicker">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h12v10H2z"/><path d="M8 3v10"/></svg>
+          Reading, reimagined
+        </div>
+        <h1>Reading is better<br>when it feels like a <em>treat</em></h1>
+        <p class="hero-sub">Short daily episodes. Real books. Zero overwhelm. We break every book into bite-sized chapters so you actually finish what you start.</p>
+        <div class="hero-pills">
+          <div class="hero-pill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            6 episodes a day
+          </div>
+          <div class="hero-pill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            Daily streaks
+          </div>
+          <div class="hero-pill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Earn more time
+          </div>
+          <div class="hero-pill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
+            Read anywhere
+          </div>
+        </div>
+        <div class="features-row">
+          <div class="feat">
+            <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            <h3>One hour a day</h3>
+            <p>Your daily reading window keeps things intentional — no doom-scrolling through chapters.</p>
+          </div>
+          <div class="feat">
+            <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+            <h3>Ad-supported</h3>
+            <p>Watch short ads to earn extra reading time. Watch and share to unlock even more.</p>
+          </div>
+          <div class="feat">
+            <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+            <h3>Any format</h3>
+            <p>EPUB, PDF, DOCX, TXT — upload any format and we handle the rest.</p>
+          </div>
+        </div>
+        <p class="hero-foot">No books in the library yet — come back soon</p>
+      </div>
+    </div>
   </div>
 
-  <!-- HOME -->
-  <div id="pageHome">
-
-    <!-- Empty state — shown when no books -->
-    <div id="emptyHero" class="empty-hero" style="display:none">
-      <h1 class="empty-hero-title">Reading is better<br>when it feels like a <em>treat</em></h1>
-      <p class="empty-hero-sub">Short daily episodes. Real books. Zero overwhelm. We break every book into bite-sized chapters so you actually finish what you start.</p>
-      <div class="empty-hero-pills">
-        <div class="pill"><i class="ti ti-clock" aria-hidden="true"></i> 6 episodes a day</div>
-        <div class="pill"><i class="ti ti-flame" aria-hidden="true"></i> Daily reading streaks</div>
-        <div class="pill"><i class="ti ti-lock-open" aria-hidden="true"></i> Earn more time</div>
-        <div class="pill"><i class="ti ti-device-mobile" aria-hidden="true"></i> Read anywhere</div>
+  <div id="librarySection" style="display:none">
+    <div class="library">
+      <div class="inner">
+        <div class="lib-head">
+          <div class="section-title">Library</div>
+        </div>
+        <div class="book-grid" id="bookGrid"></div>
       </div>
-      <div class="empty-divider"></div>
-      <div class="features">
-        <div class="feature">
-          <div class="feature-icon">⏱</div>
-          <div class="feature-title">One hour a day</div>
-          <div class="feature-desc">Your daily reading window keeps things intentional — no doom-scrolling through chapters.</div>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">🎬</div>
-          <div class="feature-title">Ad-supported</div>
-          <div class="feature-desc">Watch short ads to earn extra reading time. Watch and share to unlock even more.</div>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">📖</div>
-          <div class="feature-title">Any format</div>
-          <div class="feature-desc">EPUB, PDF, DOCX, TXT — upload any book format and we handle the rest.</div>
-        </div>
-      </div>
-      <div class="empty-cta">No books in the library yet — come back soon ✨</div>
     </div>
-
-    <!-- Library — shown when books exist -->
-    <div id="librarySection" style="display:none">
-      <div class="section-label">Library</div>
-      <div class="book-grid" id="bookGrid"></div>
-    </div>
-
   </div>
 
-  <!-- READER -->
-  <div id="pageReader" style="display:none">
-    <button class="back-btn" onclick="goHome()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Back to library</button>
-    <div class="ep-legend">
-      <div class="leg-item"><div class="leg-dot" style="background:var(--success-l);border:.5px solid var(--success-b)"></div>Done</div>
-      <div class="leg-item"><div class="leg-dot" style="background:var(--accent-l);border:.5px solid var(--accent)"></div>Reading</div>
-      <div class="leg-item"><div class="leg-dot" style="background:var(--s1);border:.5px solid var(--border-strong);opacity:.5"></div>Locked</div>
-      <div class="leg-item"><div class="leg-dot" style="background:var(--s1);border:.5px solid var(--border);opacity:.25"></div>Not yet available</div>
+</div>
+
+<!-- ══ READER ════════════════════════════════════════════════ -->
+<div id="pageReader" style="display:none">
+  <div class="reader-wrap">
+
+    <button class="back-btn" onclick="goHome()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to library
+    </button>
+
+    <div class="ep-strip-wrap">
+      <div class="ep-strip-label">Episodes</div>
+      <div class="ep-strip" id="epStrip"></div>
     </div>
-    <div class="ep-strip" id="epStrip"></div>
-    <div class="daily-stats">
-      <div class="stat-chip"><div class="stat-chip-label">Reading time today</div><div class="stat-chip-val" id="statTime">0 / 60 min</div><div class="stat-chip-bar"><div class="stat-chip-fill time" id="statTimeFill" style="width:0%"></div></div></div>
-      <div class="stat-chip"><div class="stat-chip-label">Episodes today</div><div class="stat-chip-val" id="statEps">0 / 6</div><div class="stat-chip-bar"><div class="stat-chip-fill eps" id="statEpsFill" style="width:0%"></div></div></div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Reading time today</div>
+        <div class="stat-val" id="statTime">0 / 60 min</div>
+        <div class="stat-bar"><div class="stat-fill t" id="statTimeFill" style="width:0%"></div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Episodes today</div>
+        <div class="stat-val" id="statEps">0 / 6</div>
+        <div class="stat-bar"><div class="stat-fill e" id="statEpsFill" style="width:0%"></div></div>
+      </div>
     </div>
-    <div class="session-bar">
-      <div class="session-bar-label"><span>Ad break schedule</span><span id="adBarTime">0 / 60 min</span></div>
-      <div class="session-rail-wrap">
-        <div class="session-rail"><div class="session-fill ok" id="sessionFill" style="width:0%"></div></div>
+
+    <div class="ad-schedule">
+      <div class="ad-schedule-head">
+        <div class="ad-schedule-label">Ad breaks</div>
+        <div class="ad-schedule-time" id="adBarTime">0 / 60 min</div>
+      </div>
+      <div class="ad-rail-wrap">
+        <div class="ad-rail"><div class="ad-fill" id="sessionFill" style="width:0%"></div></div>
         <div class="ad-marker" id="mk10" style="left:16.6%"></div>
         <div class="ad-marker" id="mk30" style="left:50%"></div>
         <div class="ad-marker" id="mk60" style="left:99%"></div>
       </div>
-      <div class="ad-markers-label"><span>🎬 10 min</span><span>🎬 30 min</span><span>🎬 60 min</span></div>
+      <div class="ad-ticks">
+        <span class="ad-tick" style="left:16.6%">10m</span>
+        <span class="ad-tick" style="left:50%">30m</span>
+        <span class="ad-tick" style="left:99%">60m</span>
+      </div>
+      <div style="height:14px"></div>
     </div>
 
+    <!-- AD BREAK -->
     <div id="adSection" style="display:none">
-      <div class="ad-backdrop">
-        <div class="ad-card-inner">
-          <div class="ad-top-bar"><span class="ad-eyebrow">Ad break</span><span class="ad-context" id="adContext">Episode break</span></div>
-          <div class="ad-video-wrap" id="adVideoWrap">
-            <div class="ad-placeholder" id="adPlaceholder"><i class="ti ti-player-play" aria-hidden="true"></i><span id="adPlaceholderName">Sponsor message</span></div>
-            <div class="ad-countdown-overlay" id="adCountdownOverlay">
-              <svg class="ad-countdown-ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="2.5"/><circle id="adRingSmall" cx="10" cy="10" r="8" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="50.3" stroke-dashoffset="0" stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .5s linear"/></svg>
-              <span id="adCountNum">—</span>s
-            </div>
+      <div class="ad-wrap">
+        <div class="ad-video-zone" id="adVideoWrap">
+          <div class="ad-ph" id="adPlaceholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="adPlaceholderName">Sponsor message</span>
           </div>
-          <div class="ad-info"><div class="ad-name" id="adName">—</div><div class="ad-desc" id="adDesc"></div></div>
+          <div class="ad-countdown-pill" id="adCountdownOverlay">
+            <svg class="ad-countdown-ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="2"/><circle id="adRingSmall" cx="8" cy="8" r="6" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="37.7" stroke-dashoffset="0" stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .5s linear"/></svg>
+            <span id="adCountNum">—</span>s
+          </div>
+        </div>
+        <div class="ad-bottom-bar">
+          <div class="ad-bottom-label">
+            <span class="ad-tag">AD</span>
+            <span class="ad-bottom-name" id="adName">—</span>
+          </div>
+          <span class="ad-bottom-context" id="adContext">Episode break</span>
         </div>
       </div>
     </div>
 
+    <!-- DAY DONE -->
     <div id="dayDoneSection" style="display:none">
       <div class="daydone-card">
-        <i class="ti ti-moon" aria-hidden="true" style="font-size:30px;color:var(--text-3)"></i>
-        <h3 id="dayDoneTitle">That's your hour for today!</h3>
+        <div class="daydone-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </div>
+        <h2 id="dayDoneTitle">That's your hour for today!</h2>
         <p id="dayDoneDesc">Your timer resets automatically tomorrow, or earn more time now.</p>
         <div class="daydone-timer" id="dayDoneTimer">23:00:00</div>
-        <p style="font-size:11px;color:var(--text-3);margin-bottom:14px">Time until automatic reset</p>
-        <div class="earn-grid">
-          <div class="earn-row"><div class="earn-row-info"><p>Watch an ad</p><span>+15 minutes reading time</span></div><button class="ubtn acc" onclick="doEarn('ad')">Watch</button></div>
-          <div class="earn-row"><div class="earn-row-info"><p>Share this book</p><span>+30 minutes · +1 extra episode</span></div><button class="ubtn def" onclick="doEarn('share')">Share</button></div>
-          <div class="earn-row"><div class="earn-row-info"><p>Watch and share</p><span>+45 minutes · +2 extra episodes</span></div><button class="ubtn success" onclick="doEarn('both')">Do both</button></div>
+        <p style="font-size:12px;color:var(--ink3);margin-bottom:16px">Time until automatic reset</p>
+        <div class="earn-list">
+          <div class="earn-row"><div class="earn-info"><strong>Watch an ad</strong><span>+15 minutes reading time</span></div><button class="earn-btn blue" onclick="doEarn('ad')">Watch</button></div>
+          <div class="earn-row"><div class="earn-info"><strong>Share this book</strong><span>+30 minutes &middot; +1 extra episode</span></div><button class="earn-btn def" onclick="doEarn('share')">Share</button></div>
+          <div class="earn-row"><div class="earn-info"><strong>Watch and share</strong><span>+45 minutes &middot; +2 extra episodes</span></div><button class="earn-btn green" onclick="doEarn('both')">Do both</button></div>
         </div>
       </div>
     </div>
 
+    <!-- READER MAIN -->
     <div id="readerMain">
       <div class="reader-header">
-        <div class="reader-title" id="readerTitle">Episode 1</div>
-        <div class="timer-chip ok" id="timerChip">⏱ 60:00 left</div>
+        <div class="reader-ep-title" id="readerTitle">Episode 1</div>
+        <div class="timer-badge ok" id="timerChip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span id="timerText">60:00 left</span>
+        </div>
       </div>
       <div class="progress-rail"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
       <div class="reader-body" id="readerBody"></div>
       <div class="reader-nav">
-        <button class="navbtn def" id="prevBtn" onclick="readerPrev()">← Previous</button>
-        <span id="epCounter">1 / 1</span>
-        <button class="navbtn acc" id="nextBtn" onclick="readerNext()">Next episode →</button>
+        <button class="nav-btn" id="prevBtn" onclick="readerPrev()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Previous
+        </button>
+        <span class="reader-nav-ep" id="epCounter">1 / 1</span>
+        <button class="nav-btn primary" id="nextBtn" onclick="readerNext()">
+          Next episode
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
       </div>
     </div>
-  </div>
 
-  <!-- ADMIN -->
-  <div id="pageAdmin" style="display:none">
-    <button class="back-btn" onclick="goHome()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Back</button>
+  </div>
+</div>
+
+<!-- ══ ADMIN ══════════════════════════════════════════════════ -->
+<div id="pageAdmin" style="display:none">
+  <div class="admin-shell">
 
     <div id="adminLoginView">
       <div class="admin-login-card">
-        <h3>Admin access</h3>
-        <p>Enter your password to manage books, ads and view analytics.</p>
-        <input class="admin-input" id="adminPassInput" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkAdminPass()">
+        <h2>Admin access</h2>
+        <p>Enter your password to manage books, ads and analytics.</p>
+        <input class="admin-input" id="adminPassInput" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')checkAdminPass()">
         <button class="admin-login-btn" onclick="checkAdminPass()">Sign in</button>
-        <div class="login-err" id="loginErr">Incorrect password.</div>
+        <div class="login-err" id="loginErr">Incorrect password. Try again.</div>
       </div>
     </div>
 
     <div id="adminPanelView" style="display:none">
       <div class="admin-tabs">
-        <button class="admin-tab on" onclick="switchAdminTab('books',this)">📚 Books</button>
-        <button class="admin-tab" onclick="switchAdminTab('ads',this)">🎬 Ads</button>
-        <button class="admin-tab" onclick="switchAdminTab('analytics',this)">📊 Analytics</button>
+        <button class="admin-tab on" onclick="switchAdminTab('books',this)">Books</button>
+        <button class="admin-tab" onclick="switchAdminTab('ads',this)">Ads</button>
+        <button class="admin-tab" onclick="switchAdminTab('analytics',this)">Analytics</button>
       </div>
 
-      <!-- BOOKS TAB -->
+      <!-- BOOKS -->
       <div id="adminTab-books">
-        <div class="admin-section">
-          <div class="admin-section-title">Book library <span class="badge" id="bookCountBadge">0 books</span></div>
+        <div class="admin-card">
+          <div class="admin-card-title">Book library <span class="count-badge" id="bookCountBadge">0</span></div>
           <div id="adminBookList"></div>
-          <div style="margin-top:12px;padding-top:12px;border-top:.5px solid var(--border)">
-            <div style="font-size:13px;font-weight:500;margin-bottom:12px">Add a new book</div>
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+            <div style="font-size:13px;font-weight:600;margin-bottom:14px">Add a new book</div>
             <div class="cover-row">
               <div class="cover-box">
-                <div class="cover-empty" id="coverEmpty" onclick="document.getElementById('coverFileIn').click()"><i class="ti ti-photo" aria-hidden="true"></i><span>Cover</span></div>
-                <img class="cover-thumb" id="coverThumb" style="display:none" alt="Cover">
-                <div class="cover-change" id="coverChange" onclick="document.getElementById('coverFileIn').click()" style="display:none">Change</div>
+                <div class="cover-empty" id="coverEmpty" onclick="document.getElementById('coverFileIn').click()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  Add cover
+                </div>
+                <img class="cover-thumb" id="coverThumb" alt="">
+                <div class="cover-change" id="coverChange" onclick="document.getElementById('coverFileIn').click()">Change</div>
                 <input type="file" id="coverFileIn" accept="image/*" style="display:none" onchange="previewCover(this)">
               </div>
               <div style="flex:1">
@@ -413,54 +841,63 @@ body{font-family:var(--sans);background:#f7f5f0;color:var(--text);min-height:100
               </div>
             </div>
             <div class="prog-wrap" id="bookProgWrap"><div class="prog-bar-outer"><div class="prog-bar-inner" id="bookProgBar" style="width:0%"></div></div></div>
-            <div class="file-pick-row" id="bookFileRow" onclick="document.getElementById('bookFileIn').click()">
-              <i class="ti ti-book-upload file-pick-icon" aria-hidden="true"></i>
-              <div class="file-pick-info"><p id="bookFileLabel">No book file chosen</p><span id="bookFileSub">Supports .txt, .epub, .pdf, .docx, .rtf</span></div>
-              <button class="file-pick-btn" type="button">Browse</button>
+            <div class="file-row" id="bookFileRow" onclick="document.getElementById('bookFileIn').click()">
+              <div class="file-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+              <div class="file-row-info"><p id="bookFileLabel">No book file chosen</p><span id="bookFileSub">Supports .txt .epub .pdf .docx .rtf</span></div>
+              <button class="file-row-btn" type="button">Browse</button>
             </div>
             <input type="file" id="bookFileIn" accept=".txt,.epub,.pdf,.docx,.doc,.rtf" style="display:none" onchange="bookFileChosen(this)">
-            <button class="big-btn" id="addBookBtn" onclick="addBook()" disabled>+ Add to library</button>
+            <button class="big-btn" id="addBookBtn" onclick="addBook()" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add to library
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- ADS TAB -->
+      <!-- ADS -->
       <div id="adminTab-ads" style="display:none">
-        <div class="admin-section">
-          <div class="admin-section-title">Ad library <span class="badge" id="adCountBadge">0 / 10</span></div>
-          <p style="font-size:11px;color:var(--text-3);margin-bottom:12px">Ads play at 10 min, 30 min and 60 min into each session, and between every episode.</p>
+        <div class="admin-card">
+          <div class="admin-card-title">Ad library <span class="count-badge" id="adCountBadge">0 / 10</span></div>
+          <p style="font-size:12px;color:var(--ink3);margin-bottom:14px">Ads play at 10 min, 30 min and 60 min into each session, and between every episode. Full video plays with live countdown.</p>
           <div id="adminAdList"></div>
-          <div style="margin-top:12px;padding-top:12px;border-top:.5px solid var(--border)">
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
             <label class="add-label">Ad name</label>
             <input class="field" id="adNameIn" placeholder="e.g. Audible Premium">
-            <div class="size-warn" id="sizeWarn">⚠️ Large file (<span id="sizeWarnVal"></span>). Keep ad videos under 50 MB for best results.</div>
-            <div class="file-pick-row" id="adFileRow" onclick="document.getElementById('adFileIn').click()">
-              <i class="ti ti-video file-pick-icon" aria-hidden="true"></i>
-              <div class="file-pick-info"><p id="adFileLabel">No ad file chosen</p><span>Video or image (.mp4, .mov, .jpg, .png)</span></div>
-              <button class="file-pick-btn" type="button">Browse</button>
+            <div class="size-warn" id="sizeWarn">Large file (<span id="sizeWarnVal"></span>). Videos over 50 MB may be slow to upload.</div>
+            <div class="file-row" id="adFileRow" onclick="document.getElementById('adFileIn').click()">
+              <div class="file-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+              <div class="file-row-info"><p id="adFileLabel">No ad file chosen</p><span>Video or image (.mp4 .mov .jpg .png)</span></div>
+              <button class="file-row-btn" type="button">Browse</button>
             </div>
             <input type="file" id="adFileIn" accept="video/*,image/*,.mov" style="display:none" onchange="adFileChosen(this)">
-            <button class="big-btn grn" id="addAdBtn" onclick="addAd()" disabled>+ Add ad to rotation</button>
+            <button class="big-btn green" id="addAdBtn" onclick="addAd()" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add ad to rotation
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- ANALYTICS TAB -->
+      <!-- ANALYTICS -->
       <div id="adminTab-analytics" style="display:none">
         <div id="analyticsContent">
-          <div style="text-align:center;padding:40px;color:var(--text-3)">Loading analytics...</div>
+          <div style="text-align:center;padding:48px;color:var(--ink3);font-size:14px">Loading analytics...</div>
         </div>
       </div>
 
-      <div style="text-align:center;margin-top:16px">
-        <button class="topbtn danger" onclick="adminLogout()"><i class="ti ti-logout" aria-hidden="true"></i> Sign out of admin</button>
+      <div class="admin-logout-row">
+        <button class="logout-btn" onclick="adminLogout()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
+        </button>
       </div>
     </div>
   </div>
+</div>
 
-</div><!-- .shell -->
+</div><!-- .app -->
 <div class="toast" id="toast"></div>
-
 <script>
 // ── Config ────────────────────────────────────────────────────
 const API = '';
@@ -568,7 +1005,7 @@ async function loadBooks() {
     g('bookGrid').innerHTML = books.map(b => {
       return `<div class="book-card" onclick="openBook('${b.id}')">
         <div class="book-cover">
-          ${b.coverUrl?`<img src="${b.coverUrl}" alt="${b.title}">`:'<span class="book-cover-placeholder">📖</span>'}
+          ${b.coverUrl?`<img src="${b.coverUrl}" alt="${b.title}">`:'<span class="book-cover-placeholder"></span>'}
         </div>
         <div class="book-card-body">
           <div class="book-card-title">${b.title}</div>
@@ -620,9 +1057,9 @@ function renderStrip() {
     const st=epState(i), pill=document.createElement('div');
     pill.className='ep-pill '+st;
     pill.title=st==='future'?'Finish earlier episodes first':st==='lk'?'Daily limit reached':ep.title;
-    if(st==='done')pill.innerHTML='<span>✓</span>';
-    else if(st==='lk')pill.innerHTML='<span>'+ep.episode_number+'</span><span class="lock-ico">🔒</span>';
-    else if(st==='future')pill.innerHTML='<span style="font-size:9px">🔒</span>';
+    if(st==='done')pill.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+    else if(st==='lk')pill.innerHTML='<span>'+ep.episode_number+'</span><svg style="width:9px;height:9px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+    else if(st==='future')pill.innerHTML='<svg style="width:11px;height:11px;opacity:.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
     else pill.innerHTML='<span>'+ep.episode_number+'</span>';
     if(st!=='future'&&st!=='lk') pill.onclick=()=>jumpEp(i);
     strip.appendChild(pill);
@@ -681,18 +1118,18 @@ function showReaderSection(n){
 function updateStats() {
   const tl=eTL(),secs=Math.min(daily?.secs_watched||0,tl),tp=(secs/tl)*100;
   g('statTime').textContent=Math.floor(secs/60)+' / '+Math.floor(tl/60)+' min';
-  const tf=g('statTimeFill');tf.style.width=tp+'%';tf.className='stat-chip-fill time'+(tp>=100?' full':tp>=80?' warn':'');
+  const tf=g('statTimeFill');tf.style.width=tp+'%';tf.className='stat-fill t'+(tp>=100?' full':tp>=80?' warn':'');
   const el=eEL(),eps=Math.min(daily?.eps_today||0,el),ep=(eps/el)*100;
   g('statEps').textContent=eps+' / '+el;
   g('statEpsFill').style.width=ep+'%';
-  g('sessionFill').style.width=tp+'%';g('sessionFill').className='session-fill '+(tp<50?'ok':tp<80?'warn':'full');
+  g('sessionFill').style.width=tp+'%';g('sessionFill').className='ad-fill'+(tp>=80?' full':tp>=50?' warn':'');
   g('adBarTime').textContent=Math.floor(secs/60)+' / '+Math.floor(tl/60)+' min';
   AD_TRIGGERS.forEach((t,i)=>{const el=g(['mk10','mk30','mk60'][i]);if(el)el.className='ad-marker'+((daily?.ads_hit||[]).includes(t)?' hit':'');});
 }
 function updateTimerChip() {
   const chip=g('timerChip');
-  if(isEpDone()){chip.className='timer-chip lk';chip.textContent='🎬 6 episodes done';return;}
-  if(isTimeDone()){chip.className='timer-chip lk';chip.textContent='🌙 Time up';return;}
+  if(isEpDone()){chip.className='timer-chip lk';chip.textContent=' 6 episodes done';return;}
+  if(isTimeDone()){chip.className='timer-chip lk';chip.textContent=' Time up';return;}
   const rem=Math.max(0,eTL()-(daily?.secs_watched||0)),m=Math.floor(rem/60),s=rem%60;
   chip.className=rem<600?'timer-chip warn':'timer-chip ok';
   chip.textContent='⏱ '+m+':'+String(s).padStart(2,'0')+' left';
@@ -765,7 +1202,7 @@ async function showAd(afterFn) {
 }
 function startAdCountdown(dur,onDone){
   clearInterval(adTimer);let secs=dur;
-  const ring=g('adRingSmall'),count=g('adCountNum'),circ=50.3;
+  const ring=g('adRingSmall'),count=g('adCountNum'),circ=37.7;
   const upd=()=>{ring.style.strokeDashoffset=circ*(1-secs/dur);count.textContent=secs;};upd();
   adTimer=setInterval(()=>{secs--;upd();if(secs<=0){clearInterval(adTimer);onDone();}},1000);
 }
@@ -883,7 +1320,7 @@ async function loadAdminBooks(){
   try{
     const r=await fetch(`${API}/api/books`);const books=await r.json();
     g('bookCountBadge').textContent=books.length+' book'+(books.length!==1?'s':'');
-    g('adminBookList').innerHTML=books.length?books.map((b,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${b.title}</p><span>${b.author||''} · ${b.total_episodes} episodes</span></div><button class="del-btn" onclick="deleteBook('${b.id}')">🗑</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No books yet.</p>';
+    g('adminBookList').innerHTML=books.length?books.map((b,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${b.title}</p><span>${b.author||''} · ${b.total_episodes} episodes</span></div><button class="del-btn" onclick="deleteBook('${b.id}')"></button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No books yet.</p>';
   }catch(e){}
 }
 async function deleteBook(id){
@@ -928,7 +1365,7 @@ async function loadAdminAds(){
   try{
     const r=await fetch(`${API}/api/ads`);const ads=await r.json();
     g('adCountBadge').textContent=ads.length+' / 10';
-    g('adminAdList').innerHTML=ads.length?ads.map((a,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${a.name}</p><span>${a.type}</span></div><button class="del-btn" onclick="deleteAd('${a.id}')">🗑</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No ads yet.</p>';
+    g('adminAdList').innerHTML=ads.length?ads.map((a,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${a.name}</p><span>${a.type}</span></div><button class="del-btn" onclick="deleteAd('${a.id}')"></button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No ads yet.</p>';
   }catch(e){}
 }
 async function deleteAd(id){
@@ -957,26 +1394,26 @@ async function loadAnalytics(){
 
     g('analyticsContent').innerHTML=`
       <div class="analytics-grid">
-        <div class="stat-card"><div class="stat-card-val">${d.totalVisitors.toLocaleString()}</div><div class="stat-card-label">Total visitors</div><div class="stat-card-sub">+${d.todayVisitors} today</div></div>
-        <div class="stat-card"><div class="stat-card-val">${d.weekVisitors}</div><div class="stat-card-label">This week</div><div class="stat-card-sub">Unique sessions</div></div>
-        <div class="stat-card"><div class="stat-card-val">${d.totalReaders.toLocaleString()}</div><div class="stat-card-label">Readers</div><div class="stat-card-sub">+${d.todayReaders} today</div></div>
-        <div class="stat-card"><div class="stat-card-val">${fmtTime(d.avgSecsPerDay)}</div><div class="stat-card-label">Avg session</div><div class="stat-card-sub">Per reading day</div></div>
-        <div class="stat-card"><div class="stat-card-val">${fmtTime(d.todaySecsRead)}</div><div class="stat-card-label">Read today</div><div class="stat-card-sub">${fmtTime(d.totalSecsRead)} total</div></div>
-        <div class="stat-card"><div class="stat-card-val">${d.todayEpsDone}</div><div class="stat-card-label">Episodes done today</div><div class="stat-card-sub">${d.totalEpsDone} total</div></div>
+        <div class="metric-card"><div class="metric-val">${d.totalVisitors.toLocaleString()}</div><div class="metric-label">Total visitors</div><div class="metric-sub">+${d.todayVisitors} today</div></div>
+        <div class="metric-card"><div class="metric-val">${d.weekVisitors}</div><div class="metric-label">This week</div><div class="metric-sub">Unique sessions</div></div>
+        <div class="metric-card"><div class="metric-val">${d.totalReaders.toLocaleString()}</div><div class="metric-label">Readers</div><div class="metric-sub">+${d.todayReaders} today</div></div>
+        <div class="metric-card"><div class="metric-val">${fmtTime(d.avgSecsPerDay)}</div><div class="metric-label">Avg session</div><div class="metric-sub">Per reading day</div></div>
+        <div class="metric-card"><div class="metric-val">${fmtTime(d.todaySecsRead)}</div><div class="metric-label">Read today</div><div class="metric-sub">${fmtTime(d.totalSecsRead)} total</div></div>
+        <div class="metric-card"><div class="metric-val">${d.todayEpsDone}</div><div class="metric-label">Episodes done today</div><div class="metric-sub">${d.totalEpsDone} total</div></div>
       </div>
 
-      <div class="chart-wrap">
-        <div class="chart-title">📈 Daily visitors — last 14 days</div>
+      <div class="chart-card">
+        <div class="chart-title"> Daily visitors — last 14 days</div>
         <div class="bar-chart">
           ${last14.map(date=>`<div class="bar-col">
-            <div class="bar accent" style="height:${Math.max(4,((visMap[date]||0)/maxVis)*70)}px" title="${visMap[date]||0} visitors on ${date}"></div>
+            <div class="bar blue" style="height:${Math.max(4,((visMap[date]||0)/maxVis)*70)}px" title="${visMap[date]||0} visitors on ${date}"></div>
             <div class="bar-label">${fmtDate(date)}</div>
           </div>`).join('')}
         </div>
       </div>
 
-      <div class="chart-wrap">
-        <div class="chart-title">📖 Daily reading time (minutes) — last 14 days</div>
+      <div class="chart-card">
+        <div class="chart-title"> Daily reading time (minutes) — last 14 days</div>
         <div class="bar-chart">
           ${last14.map(date=>`<div class="bar-col">
             <div class="bar" style="height:${Math.max(4,((readMap[date]||0)/maxRead)*70)}px;background:var(--success-l);border-top:2px solid var(--success)" title="${readMap[date]||0} minutes on ${date}"></div>
@@ -986,24 +1423,24 @@ async function loadAnalytics(){
       </div>
 
       ${d.popularBooks.length?`
-      <div class="chart-wrap">
-        <div class="chart-title">🏆 Most read books</div>
-        ${d.popularBooks.map((b,i)=>`<div class="popular-row">
-          <div class="popular-rank">${i+1}</div>
-          <div class="popular-info"><p>${b.title}</p><span>${b.author||'Unknown'} · ${b.readers} readers</span></div>
-          <div class="popular-stat">${fmtTime(b.total_secs||0)}</div>
+      <div class="chart-card">
+        <div class="chart-title"> Most read books</div>
+        ${d.popularBooks.map((b,i)=>`<div class="pop-row">
+          <div class="pop-rank">${i+1}</div>
+          <div class="pop-info"><p>${b.title}</p><span>${b.author||'Unknown'} · ${b.readers} readers</span></div>
+          <div class="pop-stat">${fmtTime(b.total_secs||0)}</div>
         </div>`).join('')}
       </div>`:''}
 
-      <div class="chart-wrap">
-        <div class="chart-title">👥 Recent sessions</div>
+      <div class="chart-card">
+        <div class="chart-title"> Recent sessions</div>
         <table class="sessions-table">
           <thead><tr><th>Session</th><th>Visits</th><th>Read today</th><th>Episodes</th><th>Last seen</th></tr></thead>
           <tbody>
             ${d.recentSessions.map(s=>{
               const isToday=new Date(s.last_seen*1000).toDateString()===new Date().toDateString();
               return `<tr>
-                <td>${isToday?'<span class="online-dot"></span>':''}<span style="font-family:monospace;font-size:11px">${s.id.slice(0,8)}...</span></td>
+                <td>${isToday?'<span class="live-dot"></span>':''}<span style="font-family:monospace;font-size:11px">${s.id.slice(0,8)}...</span></td>
                 <td>${s.total_visits}</td>
                 <td>${s.secs_watched?fmtTime(s.secs_watched):'-'}</td>
                 <td>${s.eps_today||0}</td>
