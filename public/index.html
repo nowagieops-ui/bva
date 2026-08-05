@@ -795,7 +795,7 @@ async function readFileAsText(file) {
     return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Could not read file'));r.readAsText(file,'utf-8');});
   }
   if(ext==='epub'||file.type==='application/epub+zip'){
-    if(!window.JSZip)throw new Error('EPUB support not loaded, please refresh and try again');
+    if(!window.JSZip){await new Promise(r=>setTimeout(r,1000)); if(!window.JSZip)throw new Error('EPUB support failed to load. Please refresh the page and try again.');}
     const buf=await file.arrayBuffer();
     const zip=await window.JSZip.loadAsync(buf);
     const containerXml=await zip.file('META-INF/container.xml')?.async('text')||'';
@@ -824,7 +824,7 @@ async function readFileAsText(file) {
     return txt;
   }
   if(ext==='pdf'||file.type==='application/pdf'){
-    if(!window.pdfjsLib)throw new Error('PDF support not loaded, please refresh and try again');
+    if(!window.pdfjsLib){await new Promise(r=>setTimeout(r,1000)); if(!window.pdfjsLib)throw new Error('PDF support failed to load. Please refresh the page and try again.');}
     const buf=await file.arrayBuffer();
     const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
     let txt='';
@@ -833,7 +833,7 @@ async function readFileAsText(file) {
     return txt;
   }
   if(['docx','doc'].includes(ext)||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document'){
-    if(!window.mammoth)throw new Error('DOCX support not loaded, please refresh and try again');
+    if(!window.mammoth){await new Promise(r=>setTimeout(r,1000)); if(!window.mammoth)throw new Error('DOCX support failed to load. Please refresh the page and try again.');}
     const buf=await file.arrayBuffer();
     const result=await window.mammoth.extractRawText({arrayBuffer:buf});
     if(!result.value.trim())throw new Error('Could not extract text from DOCX.');
@@ -874,7 +874,7 @@ async function addBook() {
     g('bookTitleIn').value='';g('bookAuthorIn').value='';g('bookFileIn').value='';g('coverFileIn').value='';
     g('coverThumb').style.display='none';g('coverEmpty').style.display='flex';g('coverChange').style.display='none';
     g('bookFileRow').classList.remove('selected');g('bookFileLabel').textContent='No book file chosen';g('bookFileSub').textContent='Supports .txt, .epub, .pdf, .docx, .rtf';
-    g('addBookBtn').disabled=true;pendingBookFile=null;pendingCoverFile=null;
+    g('addBookBtn').disabled=true; g('addBookBtn').textContent='+ Add to library'; pendingBookFile=null;pendingCoverFile=null;
     loadAdminBooks();toast('"'+title+'" added — '+d.totalEpisodes+' episodes');
   } catch(e){pw.classList.remove('on');toast('Error: '+e.message);}
 }
@@ -905,12 +905,24 @@ function adFileChosen(inp){
 async function addAd(){
   if(!pendingAdFile){toast('Choose a file first');return;}
   const name=g('adNameIn').value.trim()||pendingAdFile.name;
-  const fd=new FormData();fd.append('ad',pendingAdFile);fd.append('name',name);
-  const r=await fetch(`${API}/api/ads`,{method:'POST',headers:{'x-admin-pass':adminPass},body:fd});
-  const d=await r.json();if(d.error){toast('Error: '+d.error);return;}
-  g('adNameIn').value='';g('adFileIn').value='';g('adFileRow').classList.remove('selected');
-  g('adFileLabel').textContent='No ad file chosen';g('addAdBtn').disabled=true;g('sizeWarn').classList.remove('show');
-  pendingAdFile=null;loadAdminAds();toast('"'+name+'" added to rotation');
+  const btn=g('addAdBtn');
+  btn.disabled=true; btn.textContent='Uploading...';
+  try {
+    const fd=new FormData();
+    fd.append('ad',pendingAdFile);
+    fd.append('name',name);
+    const r=await fetch(`${API}/api/ads`,{method:'POST',headers:{'x-admin-pass':adminPass},body:fd});
+    let d;
+    try{ d=await r.json(); }catch(e){ toast('Server error — check console'); btn.disabled=false; btn.textContent='+ Add ad to rotation'; return; }
+    if(!r.ok||d.error){ toast('Error: '+(d.error||'Upload failed, status '+r.status)); btn.disabled=false; btn.textContent='+ Add ad to rotation'; return; }
+    g('adNameIn').value=''; g('adFileIn').value=''; g('adFileRow').classList.remove('selected');
+    g('adFileLabel').textContent='No ad file chosen'; g('sizeWarn').classList.remove('show');
+    pendingAdFile=null; loadAdminAds(); toast('"'+name+'" added to rotation');
+  } catch(e){
+    toast('Upload failed: '+e.message);
+  } finally {
+    btn.disabled=false; btn.textContent='+ Add ad to rotation';
+  }
 }
 async function loadAdminAds(){
   try{
