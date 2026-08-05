@@ -1,1506 +1,386 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pagebound</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --sans:'Inter',system-ui,sans-serif;
-  --serif:'Fraunces',Georgia,serif;
-  --ink:#111110;
-  --ink2:#6b6760;
-  --ink3:#a8a49e;
-  --bg:#faf9f7;
-  --card:#ffffff;
-  --line:rgba(0,0,0,.08);
-  --line2:rgba(0,0,0,.15);
-  --blue:#2563eb;
-  --blue-l:#eff6ff;
-  --blue-b:#93c5fd;
-  --green:#16a34a;
-  --green-l:#f0fdf4;
-  --green-b:#86efac;
-  --amber:#b45309;
-  --amber-l:#fffbeb;
-  --red:#dc2626;
-  --red-l:#fef2f2;
-  --r:12px;
-  --r-sm:8px;
-}
-html,body{
-  font-family:var(--sans);
-  background:var(--bg);
-  color:var(--ink);
-  min-height:100vh;
-  -webkit-font-smoothing:antialiased;
+const express      = require('express');
+const sqlite3      = require('sqlite3').verbose();
+const { open }     = require('sqlite');
+const multer       = require('multer');
+const cors         = require('cors');
+const { v4: uuid } = require('uuid');
+const path         = require('path');
+const fs           = require('fs');
+
+const app  = express();
+const PORT = process.env.PORT || 3000;
+const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
+
+// ── Dirs ──────────────────────────────────────────────────────
+['uploads/books','uploads/covers','uploads/ads','db'].forEach(d => fs.mkdirSync(d,{recursive:true}));
+
+// ── DB ────────────────────────────────────────────────────────
+let db;
+async function initDB() {
+  db = await open({ filename:'db/pagebound.db', driver:sqlite3.Database });
+  await db.exec('PRAGMA journal_mode=WAL');
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS books (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      author TEXT,
+      cover_file TEXT,
+      words_per_episode INTEGER DEFAULT 2000,
+      total_episodes INTEGER DEFAULT 0,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+    CREATE TABLE IF NOT EXISTS book_episodes (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      episode_number INTEGER NOT NULL,
+      title TEXT,
+      content TEXT NOT NULL,
+      word_count INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS ads (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      file TEXT NOT NULL,
+      type TEXT NOT NULL,
+      active INTEGER DEFAULT 1,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      ip TEXT,
+      user_agent TEXT,
+      country TEXT,
+      first_seen INTEGER DEFAULT (strftime('%s','now')),
+      last_seen INTEGER DEFAULT (strftime('%s','now')),
+      total_visits INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS daily_state (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      secs_watched INTEGER DEFAULT 0,
+      bonus_secs INTEGER DEFAULT 0,
+      eps_today INTEGER DEFAULT 0,
+      bonus_eps INTEGER DEFAULT 0,
+      ads_hit TEXT DEFAULT '[]',
+      UNIQUE(session_id, date)
+    );
+    CREATE TABLE IF NOT EXISTS reading_events (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      book_id TEXT NOT NULL,
+      episode_number INTEGER NOT NULL,
+      secs_read INTEGER DEFAULT 0,
+      date TEXT NOT NULL,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+    CREATE TABLE IF NOT EXISTS watch_progress (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      content_id TEXT NOT NULL,
+      current_ep INTEGER DEFAULT 0,
+      done_eps TEXT DEFAULT '[]',
+      UNIQUE(session_id, content_id)
+    );
+    CREATE TABLE IF NOT EXISTS page_views (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      path TEXT,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+  `);
+  console.log('DB ready');
 }
 
-/* ── FULL WIDTH LAYOUT ── */
-.app{
-  width:100%;
-  min-height:100vh;
+// ── Multer ────────────────────────────────────────────────────
+function store(dest) {
+  return multer.diskStorage({
+    destination: (_,__,cb) => cb(null,dest),
+    filename:    (_,file,cb) => cb(null,uuid()+path.extname(file.originalname))
+  });
 }
-.inner{
-  max-width:960px;
-  margin:0 auto;
-  padding:0 24px;
-}
-@media(max-width:600px){
-  .inner{padding:0 16px;}
+const bookUp  = multer({storage:store('uploads/books'), limits:{fileSize:50*1024*1024}});
+const coverUp = multer({storage:store('uploads/covers'),limits:{fileSize:5*1024*1024}});
+const adUp    = multer({storage:store('uploads/ads'),   limits:{fileSize:500*1024*1024}});
+
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
+
+// ── Admin guard ───────────────────────────────────────────────
+function admin(req,res,next) {
+  if((req.headers['x-admin-pass']||req.body?.adminPass)!==ADMIN_PASS) return res.status(401).json({error:'Unauthorized'});
+  next();
 }
 
-/* ── HOME ── */
-#pageHome{width:100%;}
+// ── Helpers ───────────────────────────────────────────────────
+function today() { return new Date().toISOString().split('T')[0]; }
+function getIP(req) { return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown'; }
 
-/* EMPTY HERO */
-.hero{
-  width:100%;
-  padding:80px 0 64px;
-  text-align:center;
-  background:linear-gradient(180deg,#ffffff 0%,var(--bg) 100%);
-  border-bottom:1px solid var(--line);
-  margin-bottom:0;
-}
-.hero-kicker{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  font-size:11px;
-  font-weight:600;
-  letter-spacing:.1em;
-  text-transform:uppercase;
-  color:var(--blue);
-  background:var(--blue-l);
-  border:1px solid var(--blue-b);
-  border-radius:100px;
-  padding:5px 14px;
-  margin-bottom:24px;
-}
-.hero h1{
-  font-family:var(--serif);
-  font-size:clamp(36px,6vw,60px);
-  font-weight:300;
-  line-height:1.1;
-  color:var(--ink);
-  margin-bottom:20px;
-  letter-spacing:-1px;
-}
-.hero h1 em{font-style:italic;color:var(--blue);}
-.hero-sub{
-  font-size:clamp(15px,2vw,18px);
-  color:var(--ink2);
-  line-height:1.75;
-  max-width:480px;
-  margin:0 auto 40px;
-}
-.hero-pills{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  justify-content:center;
-  margin-bottom:56px;
-}
-.hero-pill{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  background:var(--card);
-  border:1px solid var(--line2);
-  border-radius:100px;
-  padding:8px 18px;
-  font-size:13px;
-  font-weight:500;
-  color:var(--ink2);
-  box-shadow:0 1px 3px rgba(0,0,0,.04);
-}
-.hero-pill svg{width:16px;height:16px;color:var(--blue);flex-shrink:0}
-.features-row{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:16px;
-  max-width:700px;
-  margin:0 auto;
-}
-@media(max-width:600px){.features-row{grid-template-columns:1fr;max-width:340px;}}
-.feat{
-  background:var(--card);
-  border:1px solid var(--line);
-  border-radius:var(--r);
-  padding:20px;
-  text-align:left;
-}
-.feat-icon{
-  width:36px;height:36px;border-radius:var(--r-sm);
-  background:var(--blue-l);
-  display:flex;align-items:center;justify-content:center;
-  margin-bottom:12px;
-}
-.feat-icon svg{width:18px;height:18px;color:var(--blue)}
-.feat h3{font-size:13px;font-weight:600;margin-bottom:5px}
-.feat p{font-size:12px;color:var(--ink2);line-height:1.6}
-.hero-foot{
-  margin-top:40px;
-  font-family:var(--serif);
-  font-size:17px;
-  font-weight:300;
-  font-style:italic;
-  color:var(--ink3);
-}
-
-/* LIBRARY SECTION */
-.library{
-  padding:32px 0 80px;
-}
-.lib-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  margin-bottom:24px;
-}
-.section-title{
-  font-size:11px;
-  font-weight:700;
-  letter-spacing:.1em;
-  text-transform:uppercase;
-  color:var(--ink3);
-}
-.book-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
-  gap:16px;
-}
-@media(max-width:500px){
-  .book-grid{grid-template-columns:repeat(2,1fr);gap:14px;}
-}
-.book-card{
-  background:var(--card);
-  border:1px solid var(--line);
-  border-radius:var(--r);
-  overflow:hidden;
-  cursor:pointer;
-  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
-  box-shadow:0 1px 3px rgba(0,0,0,.04);
-}
-.book-card:hover{
-  transform:translateY(-4px);
-  box-shadow:0 12px 32px rgba(0,0,0,.1);
-  border-color:var(--blue);
-}
-.book-cover{
-  aspect-ratio:2/3;
-  position:relative;overflow:hidden;
-  background:linear-gradient(155deg,#e8e4dc 0%,#cdc8bf 100%);
-  display:flex;align-items:center;justify-content:center;
-}
-.book-cover img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;display:block}
-.book-cover-icon{
-  width:100%;height:100%;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:10px;
-}
-.book-cover-icon svg{width:36px;height:36px;color:rgba(107,103,96,.35)}
-.book-body{padding:14px 16px 16px}
-.book-title{
-  font-family:var(--serif);
-  font-size:16px;font-weight:400;line-height:1.3;
-  margin-bottom:4px;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
-}
-.book-author{
-  font-size:12px;font-weight:500;
-  color:var(--ink3);
-  margin-bottom:12px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  text-transform:uppercase;letter-spacing:.05em;
-}
-.book-footer{display:flex;align-items:center;justify-content:space-between;gap:6px}
-.ep-badge{
-  display:inline-flex;align-items:center;gap:5px;
-  font-size:11px;font-weight:600;
-  background:var(--bg);border:1px solid var(--line2);
-  border-radius:100px;padding:4px 10px;color:var(--ink2);
-}
-.ep-badge svg{width:11px;height:11px;color:var(--ink3)}
-.continue-pill{
-  display:inline-flex;align-items:center;gap:4px;
-  font-size:11px;font-weight:600;
-  background:var(--green-l);color:var(--green);
-  border-radius:100px;padding:4px 10px;
-}
-.continue-pill svg{width:10px;height:10px}
-.book-progress{height:2px;background:var(--line);border-radius:2px;margin-top:12px;overflow:hidden}
-.book-progress-fill{height:100%;background:var(--blue);border-radius:2px;transition:width .4s}
-
-/* ── READER ── */
-#pageReader{width:100%;}
-.reader-wrap{max-width:700px;margin:0 auto;padding:24px 24px 80px;}
-@media(max-width:600px){.reader-wrap{padding:16px 16px 60px;}}
-
-.back-btn{
-  display:inline-flex;align-items:center;gap:6px;
-  font-size:13px;font-weight:500;color:var(--ink2);
-  cursor:pointer;background:none;border:none;font-family:var(--sans);
-  padding:0;margin-bottom:20px;
-}
-.back-btn:hover{color:var(--ink)}
-.back-btn svg{width:16px;height:16px}
-
-/* EP STRIP */
-.ep-strip-wrap{
-  background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px 14px;margin-bottom:16px;
-  overflow:hidden;
-}
-.ep-strip-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px}
-.ep-strip{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
-.ep-strip::-webkit-scrollbar{display:none}
-.ep-pill{
-  flex-shrink:0;width:34px;height:34px;border-radius:var(--r-sm);
-  border:1px solid var(--line2);background:var(--bg);
-  font-size:11px;font-weight:600;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  color:var(--ink3);transition:all .12s;position:relative;flex-direction:column;gap:1px;
-}
-.ep-pill:hover:not(.lk):not(.future){border-color:var(--blue);color:var(--blue);background:var(--blue-l)}
-.ep-pill.done{background:var(--green-l);border-color:var(--green-b);color:var(--green)}
-.ep-pill.done svg{width:12px;height:12px}
-.ep-pill.cur{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
-.ep-pill.lk{opacity:.45;cursor:default}
-.ep-pill.future{opacity:.2;cursor:default}
-
-/* STATS BAR */
-.stats-row{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:10px;
-  margin-bottom:14px;
-}
-.stat-card{
-  background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px 14px;
-  min-width:0;
-}
-.stat-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stat-val{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stat-bar{height:3px;background:var(--bg);border-radius:2px;margin-top:8px;overflow:hidden}
-.stat-fill{height:100%;border-radius:2px;transition:width .4s}
-.stat-fill.t{background:var(--green)}
-.stat-fill.t.warn{background:var(--amber)}
-.stat-fill.t.full{background:var(--red)}
-.stat-fill.e{background:var(--blue)}
-
-/* AD SCHEDULE */
-.ad-schedule{
-  background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px 14px;margin-bottom:14px;
-}
-.ad-schedule-head{
-  display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:8px;
-}
-.ad-schedule-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
-.ad-schedule-time{font-size:11px;font-weight:500;color:var(--ink2)}
-.ad-rail-wrap{position:relative}
-.ad-rail{height:5px;background:var(--bg);border-radius:3px;overflow:hidden}
-.ad-fill{height:100%;border-radius:3px;background:var(--green);transition:width 1s linear}
-.ad-fill.warn{background:var(--amber)}
-.ad-fill.full{background:var(--red)}
-.ad-marker{position:absolute;top:-3px;width:2px;height:11px;background:var(--blue);border-radius:1px;transform:translateX(-50%)}
-.ad-marker.hit{background:var(--ink3)}
-.ad-ticks{display:flex;gap:0;margin-top:6px;position:relative}
-.ad-tick{font-size:10px;color:var(--ink3);position:absolute;transform:translateX(-50%)}
-
-/* READER HEADER */
-.reader-header{
-  display:flex;align-items:flex-start;justify-content:space-between;
-  gap:12px;margin-bottom:6px;
-}
-.reader-ep-title{
-  font-family:var(--serif);font-size:20px;font-weight:400;
-  line-height:1.3;flex:1;min-width:0;
-}
-.timer-badge{
-  flex-shrink:0;
-  display:inline-flex;align-items:center;gap:5px;
-  font-size:12px;font-weight:600;
-  padding:5px 11px;border-radius:100px;
-  white-space:nowrap;
-}
-.timer-badge.ok{background:var(--green-l);color:var(--green)}
-.timer-badge.warn{background:var(--amber-l);color:var(--amber)}
-.timer-badge.lk{background:var(--red-l);color:var(--red)}
-.timer-badge svg{width:13px;height:13px;flex-shrink:0}
-.progress-rail{height:2px;background:var(--line);border-radius:2px;margin:12px 0 28px}
-.progress-fill{height:2px;background:var(--blue);border-radius:2px;transition:width .5s}
-
-/* READER BODY */
-.reader-body{
-  font-family:var(--serif);
-  font-size:18px;
-  line-height:1.9;
-  color:var(--ink);
-}
-.reader-body p{margin-bottom:1.4em}
-.reader-nav{
-  display:flex;align-items:center;justify-content:space-between;
-  gap:12px;margin-top:48px;padding-top:20px;
-  border-top:1px solid var(--line);
-}
-.reader-nav-ep{font-size:13px;color:var(--ink3);font-weight:500}
-.nav-btn{
-  display:inline-flex;align-items:center;gap:7px;
-  padding:9px 20px;border-radius:var(--r);
-  font-size:14px;font-weight:500;cursor:pointer;
-  font-family:var(--sans);border:1px solid var(--line2);
-  background:transparent;color:var(--ink);transition:all .12s;
-}
-.nav-btn:hover{background:var(--bg)}
-.nav-btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-.nav-btn.primary:hover{background:#1d4ed8}
-.nav-btn:disabled{opacity:.35;cursor:default}
-.nav-btn svg{width:15px;height:15px}
-
-/* AD BREAK */
-.ad-wrap{
-  background:#000;border-radius:var(--r);overflow:hidden;
-  margin-bottom:16px;position:relative;
-}
-.ad-video-zone{
-  width:100%;aspect-ratio:16/9;
-  display:flex;align-items:center;justify-content:center;
-  background:#111;position:relative;overflow:hidden;
-}
-.ad-video-zone video,.ad-video-zone img{
-  width:100%;height:100%;object-fit:contain;display:block;
-  position:absolute;inset:0;
-}
-.ad-ph{
-  display:flex;flex-direction:column;align-items:center;gap:10px;
-  color:rgba(255,255,255,.3);
-}
-.ad-ph svg{width:40px;height:40px}
-.ad-ph span{font-size:13px}
-.ad-countdown-pill{
-  position:absolute;bottom:12px;right:12px;z-index:5;
-  background:rgba(0,0,0,.65);backdrop-filter:blur(4px);
-  color:#fff;border-radius:100px;
-  padding:5px 12px;font-size:12px;font-weight:600;
-  display:flex;align-items:center;gap:7px;
-}
-.ad-countdown-ring{width:16px;height:16px;flex-shrink:0}
-.ad-countdown-ring circle{transform-origin:50% 50%}
-.ad-bottom-bar{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:12px 16px;background:#1a1a1a;
-}
-.ad-bottom-label{
-  display:flex;align-items:center;gap:8px;
-}
-.ad-tag{
-  font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-  background:#e53e3e;color:#fff;border-radius:4px;padding:2px 6px;
-}
-.ad-bottom-name{font-size:13px;color:#fff;font-weight:500}
-.ad-bottom-context{font-size:11px;color:rgba(255,255,255,.4)}
-
-/* DAY DONE */
-.daydone-wrap{max-width:700px;margin:0 auto;padding:16px;}
-.daydone-card{
-  background:var(--card);border:1px solid var(--line);
-  border-radius:16px;padding:36px 28px;text-align:center;
-}
-.daydone-icon{
-  width:56px;height:56px;border-radius:50%;
-  background:var(--amber-l);
-  display:flex;align-items:center;justify-content:center;
-  margin:0 auto 16px;
-}
-.daydone-icon svg{width:28px;height:28px;color:var(--amber)}
-.daydone-card h2{font-family:var(--serif);font-size:24px;font-weight:400;margin-bottom:8px}
-.daydone-card p{font-size:14px;color:var(--ink2);line-height:1.65;margin-bottom:6px}
-.daydone-timer{
-  font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;
-  color:var(--blue);margin:14px 0 22px;letter-spacing:-1px;
-}
-.earn-list{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
-.earn-row{
-  display:flex;align-items:center;justify-content:space-between;
-  background:var(--bg);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px 16px;gap:12px;
-}
-.earn-info{text-align:left}
-.earn-info strong{font-size:14px;font-weight:600;display:block;margin-bottom:2px}
-.earn-info span{font-size:12px;color:var(--ink2)}
-.earn-btn{
-  padding:8px 16px;border-radius:var(--r-sm);font-size:13px;font-weight:600;
-  cursor:pointer;font-family:var(--sans);white-space:nowrap;border:1px solid;
-  transition:all .12s;
-}
-.earn-btn.blue{background:var(--blue-l);border-color:var(--blue-b);color:var(--blue)}
-.earn-btn.blue:hover{background:var(--blue);color:#fff}
-.earn-btn.def{background:transparent;border-color:var(--line2);color:var(--ink)}
-.earn-btn.def:hover{background:var(--bg)}
-.earn-btn.green{background:var(--green-l);border-color:var(--green-b);color:var(--green)}
-.earn-btn.green:hover{background:var(--green);color:#fff}
-
-/* ── ADMIN ── */
-.admin-shell{max-width:760px;margin:0 auto;padding:24px 24px 80px}
-@media(max-width:600px){.admin-shell{padding:16px 16px 60px}}
-
-.admin-login-card{
-  max-width:380px;margin:60px auto;
-  background:var(--card);border:1px solid var(--line);
-  border-radius:16px;padding:36px 32px;text-align:center;
-}
-.admin-login-card h2{font-family:var(--serif);font-size:24px;font-weight:400;margin-bottom:8px}
-.admin-login-card p{font-size:14px;color:var(--ink2);margin-bottom:24px}
-.admin-input{
-  width:100%;padding:11px 14px;border-radius:var(--r);
-  border:1px solid var(--line2);font-size:16px;
-  background:var(--bg);color:var(--ink);font-family:var(--sans);
-  margin-bottom:12px;text-align:center;letter-spacing:4px;
-}
-.admin-input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-l)}
-.admin-login-btn{
-  width:100%;padding:11px;border-radius:var(--r);
-  font-size:14px;font-weight:600;
-  background:var(--blue);color:#fff;border:none;
-  cursor:pointer;font-family:var(--sans);transition:background .12s;
-}
-.admin-login-btn:hover{background:#1d4ed8}
-.login-err{font-size:13px;color:var(--red);margin-top:10px;display:none}
-
-.admin-tabs{
-  display:flex;gap:2px;background:var(--card);
-  border:1px solid var(--line);border-radius:var(--r);padding:4px;
-  margin-bottom:20px;
-}
-.admin-tab{
-  flex:1;padding:8px 12px;font-size:13px;font-weight:500;
-  border-radius:var(--r-sm);cursor:pointer;border:none;
-  background:transparent;color:var(--ink2);font-family:var(--sans);
-  transition:all .12s;text-align:center;
-}
-.admin-tab.on{background:var(--blue);color:#fff;box-shadow:0 1px 4px rgba(37,99,235,.25)}
-
-.admin-card{
-  background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r);padding:20px;margin-bottom:16px;
-}
-.admin-card-title{
-  font-size:13px;font-weight:600;margin-bottom:16px;
-  display:flex;align-items:center;justify-content:space-between;
-}
-.count-badge{
-  font-size:11px;font-weight:600;
-  background:var(--blue-l);color:var(--blue);
-  border-radius:6px;padding:3px 9px;
-}
-
-.add-label{font-size:12px;font-weight:600;color:var(--ink2);display:block;margin-bottom:6px;margin-top:2px}
-.field{
-  width:100%;padding:9px 12px;border-radius:var(--r-sm);
-  border:1px solid var(--line2);font-size:13px;
-  background:var(--bg);color:var(--ink);font-family:var(--sans);margin-bottom:10px;
-}
-.field:focus{outline:none;border-color:var(--blue)}
-
-.cover-row{display:flex;gap:16px;align-items:flex-start;margin-bottom:14px}
-.cover-box{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px}
-.cover-empty{
-  width:80px;height:108px;border-radius:var(--r-sm);
-  border:2px dashed var(--line2);display:flex;align-items:center;
-  justify-content:center;cursor:pointer;background:var(--bg);
-  transition:all .14s;flex-direction:column;gap:5px;
-  color:var(--ink3);font-size:11px;font-weight:500;text-align:center;padding:8px;
-}
-.cover-empty:hover{border-color:var(--blue);background:var(--blue-l);color:var(--blue)}
-.cover-empty svg{width:22px;height:22px}
-.cover-thumb{width:80px;height:108px;border-radius:var(--r-sm);object-fit:cover;border:1px solid var(--line);display:none}
-.cover-change{font-size:11px;font-weight:500;color:var(--blue);cursor:pointer;display:none;text-align:center}
-
-.file-row{
-  border:1px solid var(--line2);border-radius:var(--r);
-  padding:11px 14px;display:flex;align-items:center;gap:10px;
-  margin-bottom:10px;background:var(--bg);cursor:pointer;transition:all .12s;
-}
-.file-row:hover{border-color:var(--blue);background:var(--blue-l)}
-.file-row.sel{border-color:var(--green-b);background:var(--green-l)}
-.file-row-icon{flex-shrink:0;width:32px;height:32px;border-radius:var(--r-sm);background:var(--card);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center}
-.file-row-icon svg{width:16px;height:16px;color:var(--ink2)}
-.file-row.sel .file-row-icon{background:var(--green-l);border-color:var(--green-b)}
-.file-row.sel .file-row-icon svg{color:var(--green)}
-.file-row-info{flex:1;min-width:0}
-.file-row-info p{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.file-row-info span{font-size:11px;color:var(--ink3)}
-.file-row.sel .file-row-info span{color:var(--green)}
-.file-row-btn{font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--card);cursor:pointer;font-family:var(--sans);color:var(--ink);white-space:nowrap;flex-shrink:0}
-
-.big-btn{
-  width:100%;padding:12px;border-radius:var(--r);font-size:14px;font-weight:600;
-  cursor:pointer;font-family:var(--sans);border:none;
-  color:#fff;background:var(--blue);
-  display:flex;align-items:center;justify-content:center;gap:8px;
-  transition:all .12s;margin-top:4px;
-}
-.big-btn:hover{background:#1d4ed8}
-.big-btn.green{background:var(--green)}
-.big-btn.green:hover{background:#15803d}
-.big-btn:disabled{opacity:.4;cursor:not-allowed}
-.big-btn svg{width:16px;height:16px}
-
-.list-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
-.list-row:last-child{border-bottom:none}
-.list-num{width:26px;height:26px;border-radius:var(--r-sm);background:var(--blue-l);color:var(--blue);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.list-info{flex:1;min-width:0}
-.list-info p{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.list-info span{font-size:11px;color:var(--ink3)}
-.del-btn{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:var(--r-sm);font-family:var(--sans);font-weight:500}
-.del-btn:hover{background:var(--red-l)}
-
-.size-warn{font-size:12px;color:var(--amber);background:var(--amber-l);border:1px solid #fcd34d;border-radius:var(--r-sm);padding:8px 12px;margin-bottom:10px;display:none;line-height:1.5}
-.size-warn.show{display:block}
-
-.prog-wrap{display:none;margin-bottom:10px}
-.prog-wrap.on{display:block}
-.prog-bar-outer{height:4px;background:var(--bg);border-radius:2px;overflow:hidden}
-.prog-bar-inner{height:100%;background:var(--blue);border-radius:2px;transition:width .3s}
-
-/* ANALYTICS */
-.analytics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
-@media(max-width:500px){.analytics-grid{grid-template-columns:repeat(2,1fr)}}
-.metric-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
-.metric-val{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-1px;margin-bottom:2px}
-.metric-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
-.metric-sub{font-size:12px;color:var(--ink2);margin-top:4px}
-.chart-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
-.chart-title{font-size:13px;font-weight:600;margin-bottom:16px;color:var(--ink)}
-.bar-chart{display:flex;align-items:flex-end;gap:4px;height:80px}
-.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}
-.bar{width:100%;background:var(--blue-l);border-radius:4px 4px 0 0;min-height:3px;transition:height .5s}
-.bar.blue{background:var(--blue)}
-.bar.green{background:var(--green-l);border-top:2px solid var(--green)}
-.bar-lbl{font-size:9px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28px;text-align:center}
-.pop-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
-.pop-row:last-child{border-bottom:none}
-.pop-rank{width:22px;text-align:center;font-size:12px;font-weight:700;color:var(--ink3);flex-shrink:0}
-.pop-info{flex:1;min-width:0}
-.pop-info p{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pop-info span{font-size:11px;color:var(--ink3)}
-.pop-stat{font-size:12px;font-weight:600;color:var(--blue);white-space:nowrap}
-.sessions-table{width:100%;border-collapse:collapse;font-size:12px}
-.sessions-table th{text-align:left;padding:7px 8px;color:var(--ink3);font-weight:600;border-bottom:1px solid var(--line);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
-.sessions-table td{padding:8px 8px;border-bottom:1px solid var(--line);color:var(--ink2)}
-.sessions-table tr:last-child td{border-bottom:none}
-.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px}
-
-.admin-logout-row{text-align:center;margin-top:20px}
-.logout-btn{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:8px 18px;border-radius:var(--r);font-size:13px;font-weight:500;
-  border:1px solid var(--red-l);background:var(--red-l);color:var(--red);
-  cursor:pointer;font-family:var(--sans);
-}
-.logout-btn:hover{background:var(--red);color:#fff}
-.logout-btn svg{width:15px;height:15px}
-
-/* TOAST */
-.toast{
-  position:fixed;bottom:20px;left:50%;
-  transform:translateX(-50%) translateY(12px);
-  background:var(--ink);color:#fff;
-  padding:10px 18px;border-radius:var(--r);
-  font-size:13px;font-weight:500;
-  opacity:0;transition:all .22s;
-  pointer-events:none;z-index:9999;
-  white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.2);
-}
-.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
-</style>
-</head>
-<body>
-<div class="app">
-
-<!-- ══ HOME ══════════════════════════════════════════════════ -->
-<div id="pageHome">
-
-  <div id="emptyHero" style="display:none">
-    <div class="hero">
-      <div class="inner">
-        <h1>Reading is better<br>when it feels like a <em>treat</em></h1>
-        <p class="hero-sub">Short daily episodes. Real books. Zero overwhelm. We break every book into bite-sized chapters so you actually finish what you start.</p>
-        <div class="hero-pills">
-          <div class="hero-pill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            6 episodes a day
-          </div>
-          <div class="hero-pill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-            Daily streaks
-          </div>
-          <div class="hero-pill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            Earn more time
-          </div>
-          <div class="hero-pill">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
-            Read anywhere
-          </div>
-        </div>
-        <div class="features-row">
-          <div class="feat">
-            <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-            <h3>One hour a day</h3>
-            <p>Your daily reading window keeps things intentional — no doom-scrolling through chapters.</p>
-          </div>
-          <div class="feat">
-            <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
-            <h3>Ad-supported</h3>
-            <p>Watch short ads to earn extra reading time. Watch and share to unlock even more.</p>
-          </div>
-          <div class="feat">
-            <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
-            <h3>Any format</h3>
-            <p>EPUB, PDF, DOCX, TXT — upload any format and we handle the rest.</p>
-          </div>
-        </div>
-        <p class="hero-foot">No books in the library yet — come back soon</p>
-      </div>
-    </div>
-  </div>
-
-  <div id="librarySection" style="display:none">
-    <div class="library">
-      <div class="inner">
-        <div class="lib-head">
-          <div class="section-title">Library</div>
-        </div>
-        <div class="book-grid" id="bookGrid"></div>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<!-- ══ READER ════════════════════════════════════════════════ -->
-<div id="pageReader" style="display:none">
-  <div class="reader-wrap">
-
-    <button class="back-btn" onclick="goHome()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-      Back to library
-    </button>
-
-    <div class="ep-strip-wrap">
-      <div class="ep-strip-label">Episodes</div>
-      <div class="ep-strip" id="epStrip"></div>
-    </div>
-
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-label">Reading time today</div>
-        <div class="stat-val" id="statTime">0 / 60 min</div>
-        <div class="stat-bar"><div class="stat-fill t" id="statTimeFill" style="width:0%"></div></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Episodes today</div>
-        <div class="stat-val" id="statEps">0 / 6</div>
-        <div class="stat-bar"><div class="stat-fill e" id="statEpsFill" style="width:0%"></div></div>
-      </div>
-    </div>
-
-    <div class="ad-schedule">
-      <div class="ad-schedule-head">
-        <div class="ad-schedule-label">Ad breaks</div>
-        <div class="ad-schedule-time" id="adBarTime">0 / 60 min</div>
-      </div>
-      <div class="ad-rail-wrap">
-        <div class="ad-rail"><div class="ad-fill" id="sessionFill" style="width:0%"></div></div>
-        <div class="ad-marker" id="mk10" style="left:16.6%"></div>
-        <div class="ad-marker" id="mk30" style="left:50%"></div>
-        <div class="ad-marker" id="mk60" style="left:99%"></div>
-      </div>
-      <div class="ad-ticks">
-        <span class="ad-tick" style="left:16.6%">10m</span>
-        <span class="ad-tick" style="left:50%">30m</span>
-        <span class="ad-tick" style="left:99%">60m</span>
-      </div>
-      <div style="height:14px"></div>
-    </div>
-
-    <!-- AD BREAK -->
-    <div id="adSection" style="display:none">
-      <div class="ad-wrap">
-        <div class="ad-video-zone" id="adVideoWrap">
-          <div class="ad-ph" id="adPlaceholder">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            <span id="adPlaceholderName">Sponsor message</span>
-          </div>
-          <div class="ad-countdown-pill" id="adCountdownOverlay">
-            <svg class="ad-countdown-ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="2"/><circle id="adRingSmall" cx="8" cy="8" r="6" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="37.7" stroke-dashoffset="0" stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .5s linear"/></svg>
-            <span id="adCountNum">—</span>s
-          </div>
-        </div>
-        <div class="ad-bottom-bar">
-          <div class="ad-bottom-label">
-            <span class="ad-tag">AD</span>
-            <span class="ad-bottom-name" id="adName">—</span>
-          </div>
-          <span class="ad-bottom-context" id="adContext">Episode break</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- DAY DONE -->
-    <div id="dayDoneSection" style="display:none">
-      <div class="daydone-card">
-        <div class="daydone-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </div>
-        <h2 id="dayDoneTitle">That's your hour for today!</h2>
-        <p id="dayDoneDesc">Your timer resets automatically tomorrow, or earn more time now.</p>
-        <div class="daydone-timer" id="dayDoneTimer">23:00:00</div>
-        <p style="font-size:12px;color:var(--ink3);margin-bottom:16px">Time until automatic reset</p>
-        <div class="earn-list">
-          <div class="earn-row"><div class="earn-info"><strong>Watch an ad</strong><span>+15 minutes reading time</span></div><button class="earn-btn blue" onclick="doEarn('ad')">Watch</button></div>
-          <div class="earn-row"><div class="earn-info"><strong>Share this book</strong><span>+30 minutes &middot; +1 extra episode</span></div><button class="earn-btn def" onclick="doEarn('share')">Share</button></div>
-          <div class="earn-row"><div class="earn-info"><strong>Watch and share</strong><span>+45 minutes &middot; +2 extra episodes</span></div><button class="earn-btn green" onclick="doEarn('both')">Do both</button></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- READER MAIN -->
-    <div id="readerMain">
-      <div class="reader-header">
-        <div class="reader-ep-title" id="readerTitle">Episode 1</div>
-        <div class="timer-badge ok" id="timerChip">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span id="timerText">60:00 left</span>
-        </div>
-      </div>
-      <div class="progress-rail"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-      <div class="reader-body" id="readerBody"></div>
-      <div class="reader-nav">
-        <button class="nav-btn" id="prevBtn" onclick="readerPrev()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-          Previous
-        </button>
-        <span class="reader-nav-ep" id="epCounter">1 / 1</span>
-        <button class="nav-btn primary" id="nextBtn" onclick="readerNext()">
-          Next episode
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- ══ ADMIN ══════════════════════════════════════════════════ -->
-<div id="pageAdmin" style="display:none">
-  <div class="admin-shell">
-
-    <div id="adminLoginView">
-      <div class="admin-login-card">
-        <h2>Admin access</h2>
-        <p>Enter your password to manage books, ads and analytics.</p>
-        <input class="admin-input" id="adminPassInput" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')checkAdminPass()">
-        <button class="admin-login-btn" onclick="checkAdminPass()">Sign in</button>
-        <div class="login-err" id="loginErr">Incorrect password. Try again.</div>
-      </div>
-    </div>
-
-    <div id="adminPanelView" style="display:none">
-      <div class="admin-tabs">
-        <button class="admin-tab on" onclick="switchAdminTab('books',this)">Books</button>
-        <button class="admin-tab" onclick="switchAdminTab('ads',this)">Ads</button>
-        <button class="admin-tab" onclick="switchAdminTab('analytics',this)">Analytics</button>
-      </div>
-
-      <!-- BOOKS -->
-      <div id="adminTab-books">
-        <div class="admin-card">
-          <div class="admin-card-title">Book library <span class="count-badge" id="bookCountBadge">0</span></div>
-          <div id="adminBookList"></div>
-          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
-            <div style="font-size:13px;font-weight:600;margin-bottom:14px">Add a new book</div>
-            <div class="cover-row">
-              <div class="cover-box">
-                <div class="cover-empty" id="coverEmpty" onclick="document.getElementById('coverFileIn').click()">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  Add cover
-                </div>
-                <img class="cover-thumb" id="coverThumb" alt="">
-                <div class="cover-change" id="coverChange" onclick="document.getElementById('coverFileIn').click()">Change</div>
-                <input type="file" id="coverFileIn" accept="image/*" style="display:none" onchange="previewCover(this)">
-              </div>
-              <div style="flex:1">
-                <label class="add-label">Book title *</label>
-                <input class="field" id="bookTitleIn" placeholder="e.g. The Midnight Library" oninput="updateBookBtn()">
-                <label class="add-label">Author *</label>
-                <input class="field" id="bookAuthorIn" placeholder="e.g. Matt Haig" oninput="updateBookBtn()">
-                <label class="add-label">Episode length</label>
-                <select class="field" id="wpeSelect">
-                  <option value="1500">Short — 1,500 words (~6 min)</option>
-                  <option value="2000" selected>Standard — 2,000 words (~8 min)</option>
-                  <option value="2500">Long — 2,500 words (~10 min)</option>
-                  <option value="3000">Extended — 3,000 words (~12 min)</option>
-                </select>
-              </div>
-            </div>
-            <div class="prog-wrap" id="bookProgWrap"><div class="prog-bar-outer"><div class="prog-bar-inner" id="bookProgBar" style="width:0%"></div></div></div>
-            <div class="file-row" id="bookFileRow" onclick="document.getElementById('bookFileIn').click()">
-              <div class="file-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
-              <div class="file-row-info"><p id="bookFileLabel">No book file chosen</p><span id="bookFileSub">Supports .txt .epub .pdf .docx .rtf</span></div>
-              <button class="file-row-btn" type="button">Browse</button>
-            </div>
-            <input type="file" id="bookFileIn" accept=".txt,.epub,.pdf,.docx,.doc,.rtf" style="display:none" onchange="bookFileChosen(this)">
-            <button class="big-btn" id="addBookBtn" onclick="addBook()" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add to library
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ADS -->
-      <div id="adminTab-ads" style="display:none">
-        <div class="admin-card">
-          <div class="admin-card-title">Ad library <span class="count-badge" id="adCountBadge">0 / 10</span></div>
-          <p style="font-size:12px;color:var(--ink3);margin-bottom:14px">Ads play at 10 min, 30 min and 60 min into each session, and between every episode. Full video plays with live countdown.</p>
-          <div id="adminAdList"></div>
-          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
-            <label class="add-label">Ad name</label>
-            <input class="field" id="adNameIn" placeholder="e.g. Audible Premium">
-            <div class="size-warn" id="sizeWarn">Large file (<span id="sizeWarnVal"></span>). Videos over 50 MB may be slow to upload.</div>
-            <div class="file-row" id="adFileRow" onclick="document.getElementById('adFileIn').click()">
-              <div class="file-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
-              <div class="file-row-info"><p id="adFileLabel">No ad file chosen</p><span>Video or image (.mp4 .mov .jpg .png)</span></div>
-              <button class="file-row-btn" type="button">Browse</button>
-            </div>
-            <input type="file" id="adFileIn" accept="video/*,image/*,.mov" style="display:none" onchange="adFileChosen(this)">
-            <button class="big-btn green" id="addAdBtn" onclick="addAd()" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Add ad to rotation
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ANALYTICS -->
-      <div id="adminTab-analytics" style="display:none">
-        <div id="analyticsContent">
-          <div style="text-align:center;padding:48px;color:var(--ink3);font-size:14px">Loading analytics...</div>
-        </div>
-      </div>
-
-      <div class="admin-logout-row">
-        <button class="logout-btn" onclick="adminLogout()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Sign out
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-</div><!-- .app -->
-<div class="toast" id="toast"></div>
-<script>
-// ── Config ────────────────────────────────────────────────────
-const API = '';
-const DAILY_LIMIT = 3600;
-const EP_MAX = 6;
-const OPEN_WINDOW = 3;
-const AD_TRIGGERS = [600, 1800, 3600];
-
-// ── State ─────────────────────────────────────────────────────
-let sessionId = localStorage.getItem('pb_session') || null;
-let adminPass = null;
-let daily = null;
-let activeBook = null;
-let bookProg = null;
-let tickTimer = null, adTimer = null, dayTimer = null, afterAdFn = null;
-let pendingBookFile = null, pendingCoverFile = null, pendingAdFile = null;
-let currentBookId = null; // for analytics tracking
-
-// ── Boot ──────────────────────────────────────────────────────
-async function boot() {
-  if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  try {
-    const r = await fetch(`${API}/api/session`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sessionId, path: location.pathname }) });
-    const d = await r.json();
-    sessionId = d.sessionId;
-    localStorage.setItem('pb_session', sessionId);
-    await refreshDaily();
-  } catch(e) { console.warn('Session init failed:', e); }
-  // Route based on URL path
-  const path = window.location.pathname;
-  if (path === '/admin') {
-    toggleAdmin();
-  } else if (path.startsWith('/book/')) {
-    const bookId = path.replace('/book/', '');
-    // Hide home, go straight to reader
-    g('pageHome').style.display = 'none';
-    openBook(bookId);
-  } else {
-    loadBooks();
+// ── Session ───────────────────────────────────────────────────
+app.post('/api/session', async (req,res) => {
+  const { sessionId } = req.body;
+  const ip = getIP(req);
+  const ua = req.headers['user-agent']||'';
+  if (sessionId) {
+    const s = await db.get('SELECT id FROM sessions WHERE id=?', sessionId);
+    if (s) {
+      await db.run('UPDATE sessions SET last_seen=strftime(\'%s\',\'now\'), total_visits=total_visits+1 WHERE id=?', sessionId);
+      // Log page view
+      await db.run('INSERT INTO page_views (id,session_id,path) VALUES (?,?,?)', uuid(), sessionId, req.body.path||'/');
+      return res.json({sessionId:s.id});
+    }
   }
+  const id = uuid();
+  await db.run('INSERT INTO sessions (id,ip,user_agent) VALUES (?,?,?)', id, ip, ua);
+  await db.run('INSERT INTO page_views (id,session_id,path) VALUES (?,?,?)', uuid(), id, req.body.path||'/');
+  res.json({sessionId:id});
+});
+
+// ── Daily state ───────────────────────────────────────────────
+async function getOrCreateDaily(sessionId) {
+  const t = today();
+  let s = await db.get('SELECT * FROM daily_state WHERE session_id=? AND date=?', sessionId, t);
+  if (!s) {
+    const id=uuid();
+    await db.run('INSERT INTO daily_state (id,session_id,date) VALUES (?,?,?)', id, sessionId, t);
+    s = await db.get('SELECT * FROM daily_state WHERE id=?', id);
+  }
+  return s;
 }
 
-function g(id) { return document.getElementById(id); }
-let toastT;
-function toast(msg) { const t=g('toast');t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),3200); }
-function aH() { return { 'x-session-id': sessionId, 'Content-Type': 'application/json' }; }
-function adH() { return { 'x-session-id': sessionId, 'x-admin-pass': adminPass, 'Content-Type': 'application/json' }; }
+app.get('/api/daily', async (req,res) => {
+  const sid = req.headers['x-session-id'];
+  if (!sid) return res.status(400).json({error:'No session'});
+  const s = await getOrCreateDaily(sid);
+  res.json({...s, ads_hit:JSON.parse(s.ads_hit||'[]'), effectiveTimeLimit:3600+(s.bonus_secs||0), effectiveEpLimit:6+(s.bonus_eps||0)});
+});
 
-// ── Pages ─────────────────────────────────────────────────────
-function showPage(id) { ['pageHome','pageReader','pageAdmin'].forEach(p=>g(p).style.display='none'); g(id).style.display='block'; }
-function goHome() { clearInterval(tickTimer);clearInterval(dayTimer);clearInterval(adTimer); activeBook=null;currentBookId=null; if(window.location.pathname=='/admin'){return;} showPage('pageHome'); loadBooks(); }
-function toggleAdmin() { showPage('pageAdmin'); clearInterval(tickTimer); g('adminLoginView').style.display='block'; g('adminPanelView').style.display='none'; g('adminPassInput').value=''; g('loginErr').style.display='none'; setTimeout(()=>g('adminPassInput').focus(),100); }
-function adminLogout() { adminPass=null; window.location.href='/'; }
+app.post('/api/daily/tick', async (req,res) => {
+  const sid = req.headers['x-session-id'];
+  const {delta=10, bookId, episodeNumber} = req.body;
+  const s = await getOrCreateDaily(sid);
+  await db.run('UPDATE daily_state SET secs_watched=? WHERE session_id=? AND date=?', (s.secs_watched||0)+delta, sid, today());
+  // Track reading event for analytics
+  if (bookId) {
+    const existing = await db.get('SELECT id FROM reading_events WHERE session_id=? AND book_id=? AND episode_number=? AND date=?', sid, bookId, episodeNumber||0, today());
+    if (existing) await db.run('UPDATE reading_events SET secs_read=secs_read+? WHERE id=?', delta, existing.id);
+    else await db.run('INSERT INTO reading_events (id,session_id,book_id,episode_number,secs_read,date) VALUES (?,?,?,?,?,?)', uuid(), sid, bookId, episodeNumber||0, delta, today());
+  }
+  res.json({ok:true});
+});
 
-async function checkAdminPass() {
-  const pass = g('adminPassInput').value;
-  try {
-    const r = await fetch(`${API}/api/admin/verify`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password:pass}) });
-    if (r.ok) { adminPass=pass; g('adminLoginView').style.display='none'; g('adminPanelView').style.display='block'; loadAdminBooks(); loadAdminAds(); }
-    else { g('loginErr').style.display='block'; g('adminPassInput').value=''; }
-  } catch(e) { g('loginErr').style.display='block'; }
-}
+app.post('/api/daily/ad-hit', async (req,res) => {
+  const sid=req.headers['x-session-id'], {trigger}=req.body;
+  const s=await getOrCreateDaily(sid);
+  const hits=JSON.parse(s.ads_hit||'[]');
+  if(!hits.includes(trigger)){hits.push(trigger);await db.run('UPDATE daily_state SET ads_hit=? WHERE session_id=? AND date=?',JSON.stringify(hits),sid,today());}
+  res.json({ok:true});
+});
 
-function switchAdminTab(name, btn) {
-  ['books','ads','analytics'].forEach(t=>{ g('adminTab-'+t).style.display='none'; });
-  document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('on'));
-  g('adminTab-'+name).style.display='block';
-  btn.classList.add('on');
-  if (name==='analytics') loadAnalytics();
-}
+app.post('/api/daily/episode-done', async (req,res) => {
+  const sid=req.headers['x-session-id'];
+  const s=await getOrCreateDaily(sid);
+  await db.run('UPDATE daily_state SET eps_today=? WHERE session_id=? AND date=?',(s.eps_today||0)+1,sid,today());
+  res.json({ok:true});
+});
 
-// ── Daily ─────────────────────────────────────────────────────
-async function refreshDaily() {
-  try { if(!sessionId)return; const r=await fetch(`${API}/api/daily`,{headers:aH()}); if(r.ok)daily=await r.json(); } catch(e){}
-}
-function eTL() { return DAILY_LIMIT+(daily?.bonus_secs||0); }
-function eEL() { return EP_MAX+(daily?.bonus_eps||0); }
-function isTimeDone() { return (daily?.secs_watched||0)>=eTL(); }
-function isEpDone() { return (daily?.eps_today||0)>=eEL(); }
-function isDayDone() { return isTimeDone()||isEpDone(); }
-
-async function tick(delta=10) {
-  try { await fetch(`${API}/api/daily/tick`,{method:'POST',headers:aH(),body:JSON.stringify({delta,bookId:currentBookId,episodeNumber:bookProg?.current_ep})}); await refreshDaily(); } catch(e){}
-}
-async function markAdHit(t) { try{await fetch(`${API}/api/daily/ad-hit`,{method:'POST',headers:aH(),body:JSON.stringify({trigger:t})});await refreshDaily();}catch(e){} }
-async function markEpDone() { try{await fetch(`${API}/api/daily/episode-done`,{method:'POST',headers:aH()});await refreshDaily();}catch(e){} }
-async function doEarn(action) {
-  try { await fetch(`${API}/api/daily/earn`,{method:'POST',headers:aH(),body:JSON.stringify({action})}); await refreshDaily(); } catch(e){}
-  toast('Earned '+{ad:'+15 min',share:'+30 min · +1 ep',both:'+45 min · +2 eps'}[action]);
-  updateStats();updateTimerChip();
-  if(!isDayDone()){clearInterval(dayTimer);showReaderSection('reader');loadEpisode(bookProg.current_ep);startTick();}
-}
+app.post('/api/daily/earn', async (req,res) => {
+  const sid=req.headers['x-session-id'],{action}=req.body;
+  const te={ad:900,share:1800,both:2700},ee={ad:0,share:1,both:2};
+  const s=await getOrCreateDaily(sid);
+  await db.run('UPDATE daily_state SET bonus_secs=?,bonus_eps=? WHERE session_id=? AND date=?',(s.bonus_secs||0)+(te[action]||0),(s.bonus_eps||0)+(ee[action]||0),sid,today());
+  res.json({ok:true});
+});
 
 // ── Progress ──────────────────────────────────────────────────
-async function loadProgress(id) {
-  try { const r=await fetch(`${API}/api/progress/${id}`,{headers:aH()}); return r.ok?await r.json():{current_ep:0,done_eps:[]}; } catch(e){return{current_ep:0,done_eps:[]};}
+app.get('/api/progress/:contentId', async (req,res) => {
+  const sid=req.headers['x-session-id'];
+  let p=await db.get('SELECT * FROM watch_progress WHERE session_id=? AND content_id=?',sid,req.params.contentId);
+  if(!p){const id=uuid();await db.run('INSERT INTO watch_progress (id,session_id,content_id) VALUES (?,?,?)',id,sid,req.params.contentId);p=await db.get('SELECT * FROM watch_progress WHERE id=?',id);}
+  res.json({...p,done_eps:JSON.parse(p.done_eps||'[]')});
+});
+
+app.post('/api/progress/:contentId', async (req,res) => {
+  const sid=req.headers['x-session-id'],{currentEp,doneEps}=req.body;
+  await db.run(`INSERT INTO watch_progress (id,session_id,content_id,current_ep,done_eps) VALUES (?,?,?,?,?)
+    ON CONFLICT(session_id,content_id) DO UPDATE SET current_ep=excluded.current_ep,done_eps=excluded.done_eps`,
+    uuid(),sid,req.params.contentId,currentEp,JSON.stringify(doneEps||[]));
+  res.json({ok:true});
+});
+
+// ── Books ─────────────────────────────────────────────────────
+function parseBook(text,wpe){
+  const cleaned=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n{4,}/g,'\n\n\n').trim();
+  const paras=cleaned.split(/\n\n+/).map(p=>p.trim()).filter(Boolean);
+  const eps=[];let cur=[],cw=0,n=1;
+  for(const p of paras){const wc=p.split(/\s+/).length;if(cw>0&&cw+wc>wpe*1.15){eps.push(makeEp(n,cur));n++;cur=[p];cw=wc;}else{cur.push(p);cw+=wc;}}
+  if(cur.length)eps.push(makeEp(n,cur));
+  return eps;
 }
-async function saveProgress(id,ep,done) {
-  try { await fetch(`${API}/api/progress/${id}`,{method:'POST',headers:aH(),body:JSON.stringify({currentEp:ep,doneEps:done})}); } catch(e){}
+function makeEp(n,paras){
+  const content=paras.join('\n\n');let title='';
+  for(const p of paras){const t=p.trim();if(t.length>10&&!/^(chapter|part|book|section|prologue|epilogue|introduction|preface|\d+\.?\s*$)/i.test(t)){title=t.split(/\s+/).slice(0,6).join(' ').replace(/[,;:!?—–]$/,'')+(t.split(/\s+/).length>6?'...':'');break;}}
+  return{n,title:title||'Episode '+n,content,wordCount:content.split(/\s+/).length};
 }
 
-// ── Home ──────────────────────────────────────────────────────
-function coverColor(title) {
-  const colors = [
-    'linear-gradient(135deg,#1e3a5f,#2d6a9f)',
-    'linear-gradient(135deg,#2d4a1e,#4a7c2d)',
-    'linear-gradient(135deg,#4a1e2d,#9f2d4a)',
-    'linear-gradient(135deg,#3a2d1e,#7c5a2d)',
-    'linear-gradient(135deg,#1e2d4a,#2d4a9f)',
-    'linear-gradient(135deg,#4a3a1e,#9f7c2d)',
-    'linear-gradient(135deg,#2d1e4a,#6a2d9f)',
-    'linear-gradient(135deg,#1e4a4a,#2d9f9f)',
-  ];
-  let hash = 0;
-  for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-}
-async function loadBooks() {
-  try {
-    const r = await fetch(`${API}/api/books`);
-    if (!r.ok) { showEmptyHero(); return; }
-    const books = await r.json();
-    if (!books.length) { showEmptyHero(); return; }
-    g('emptyHero').style.display='none';
-    g('librarySection').style.display='block';
-    g('bookGrid').innerHTML = books.map(b => {
-      return `<div class="book-card" onclick="openBookNewTab('${b.id}')" style="text-decoration:none;display:block">
-        <div class="book-cover" style="background:${b.coverUrl?'transparent':coverColor(b.title)}">
-          ${b.coverUrl
-            ? `<img src="${b.coverUrl}" alt="${b.title}">`
-            : `<div class="book-cover-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>`
-          }
-        </div>
-        <div class="book-body">
-          <div class="book-title">${b.title}</div>
-          <div class="book-author">${b.author || 'Unknown author'}</div>
-          <div class="book-footer">
-            <span class="ep-badge">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-              ${b.total_episodes} ep
-            </span>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-  } catch(e) { showEmptyHero(); }
-}
+app.post('/api/books/upload', admin, bookUp.single('book'), async (req,res) => {
+  try{
+    const {title,author,wordsPerEpisode=2000}=req.body;
+    if(!req.file||!title) return res.status(400).json({error:'Missing file or title'});
+    const text=fs.readFileSync(req.file.path,'utf8');
+    fs.unlinkSync(req.file.path);
+    const eps=parseBook(text,parseInt(wordsPerEpisode));
+    const id=uuid();
+    await db.run('INSERT INTO books (id,title,author,words_per_episode,total_episodes) VALUES (?,?,?,?,?)',id,title,author||'',parseInt(wordsPerEpisode),eps.length);
+    for(const ep of eps) await db.run('INSERT INTO book_episodes (id,book_id,episode_number,title,content,word_count) VALUES (?,?,?,?,?,?)',uuid(),id,ep.n,ep.title,ep.content,ep.wordCount);
+    res.json({bookId:id,title,totalEpisodes:eps.length});
+  }catch(e){res.status(500).json({error:e.message});}
+});
 
-function showEmptyHero() {
-  g('emptyHero').style.display='block';
-  g('librarySection').style.display='none';
-}
+app.post('/api/books/:id/cover', admin, coverUp.single('cover'), async (req,res) => {
+  await db.run('UPDATE books SET cover_file=? WHERE id=?',req.file.filename,req.params.id);
+  res.json({coverUrl:'/uploads/covers/'+req.file.filename});
+});
 
-function openBookNewTab(id) {
-  window.open('/book/' + id, '_blank');
-}
+app.get('/api/books', async (_,res) => {
+  const books=await db.all('SELECT * FROM books ORDER BY created_at DESC');
+  res.json(books.map(b=>({...b,coverUrl:b.cover_file?'/uploads/covers/'+b.cover_file:null})));
+});
 
-async function openBook(id) {
-  try {
-    const r = await fetch(`${API}/api/books/${id}`);
-    if(!r.ok){toast('Could not load book');return;}
-    activeBook = await r.json();
-    currentBookId = id;
-    bookProg = await loadProgress(id);
-    await refreshDaily();
-    showPage('pageReader');
-    renderStrip();
-    updateStats(); updateTimerChip();
-    if(isDayDone()){showReaderSection('daydone');startDayTimer();}
-    else{showReaderSection('reader');loadEpisode(bookProg.current_ep||0);startTick();}
-  } catch(e){toast('Error loading book');}
-}
+app.get('/api/books/:id', async (req,res) => {
+  const b=await db.get('SELECT * FROM books WHERE id=?',req.params.id);
+  if(!b) return res.status(404).json({error:'Not found'});
+  const eps=await db.all('SELECT id,episode_number,title,word_count FROM book_episodes WHERE book_id=? ORDER BY episode_number',req.params.id);
+  res.json({...b,coverUrl:b.cover_file?'/uploads/covers/'+b.cover_file:null,episodes:eps});
+});
 
-// ── Episode strip ─────────────────────────────────────────────
-function epState(i) {
-  const done=bookProg.done_eps||[], cur=bookProg.current_ep||0;
-  if(done.includes(i)) return 'done';
-  if(i===cur) return 'cur';
-  const wEnd=cur+OPEN_WINDOW-1;
-  if(i>cur&&i<=wEnd) return isDayDone()?'lk':'available';
-  if(i>wEnd) return 'future';
-  return 'available';
-}
-function renderStrip() {
-  const strip=g('epStrip'); strip.innerHTML='';
-  if(!activeBook)return;
-  activeBook.episodes.forEach((ep,i)=>{
-    const st=epState(i), pill=document.createElement('div');
-    pill.className='ep-pill '+st;
-    pill.title=st==='future'?'Finish earlier episodes first':st==='lk'?'Daily limit reached':ep.title;
-    if(st==='done')pill.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
-    else if(st==='lk')pill.innerHTML='<span>'+ep.episode_number+'</span><svg style="width:9px;height:9px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
-    else if(st==='future')pill.innerHTML='<svg style="width:11px;height:11px;opacity:.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
-    else pill.innerHTML='<span>'+ep.episode_number+'</span>';
-    if(st!=='future'&&st!=='lk') pill.onclick=()=>jumpEp(i);
-    strip.appendChild(pill);
+app.get('/api/books/:id/episodes/:num', async (req,res) => {
+  const ep=await db.get('SELECT * FROM book_episodes WHERE book_id=? AND episode_number=?',req.params.id,req.params.num);
+  if(!ep) return res.status(404).json({error:'Not found'});
+  res.json(ep);
+});
+
+app.delete('/api/books/:id', admin, async (req,res) => {
+  const b=await db.get('SELECT * FROM books WHERE id=?',req.params.id);
+  if(b?.cover_file){try{fs.unlinkSync('uploads/covers/'+b.cover_file);}catch{}}
+  await db.run('DELETE FROM book_episodes WHERE book_id=?',req.params.id);
+  await db.run('DELETE FROM books WHERE id=?',req.params.id);
+  res.json({ok:true});
+});
+
+// ── Ads ───────────────────────────────────────────────────────
+app.post('/api/ads', admin, (req,res,next) => {
+  adUp.single('ad')(req,res,(err)=>{
+    if(err){
+      if(err.code==='LIMIT_FILE_SIZE') return res.status(413).json({error:'File too large — max 500 MB'});
+      return res.status(400).json({error:err.message||'Upload failed'});
+    }
+    next();
   });
-  strip.children[bookProg.current_ep||0]?.scrollIntoView({block:'nearest',inline:'center'});
-}
-function jumpEp(i) {
-  const st=epState(i);
-  if(st==='lk'){showReaderSection('daydone');startDayTimer();return;}
-  if(st==='future')return;
-  showReaderSection('reader');loadEpisode(i);
-}
-
-async function loadEpisode(i) {
-  const ep=activeBook.episodes[i]; if(!ep)return;
+}, async (req,res) => {
   try {
-    const r=await fetch(`${API}/api/books/${activeBook.id}/episodes/${ep.episode_number}`);
-    if(!r.ok){toast('Could not load episode');return;}
-    const data=await r.json();
-    bookProg.current_ep=i;
-    await saveProgress(activeBook.id, i, bookProg.done_eps||[]);
-    g('readerTitle').textContent='Episode '+ep.episode_number+' — '+ep.title;
-    g('epCounter').textContent=(i+1)+' / '+activeBook.episodes.length;
-    g('progressFill').style.width=(((i+1)/activeBook.episodes.length)*100)+'%';
-    g('readerBody').innerHTML=data.content.split(/\n\n+/).filter(Boolean).map(p=>'<p>'+p.trim()+'</p>').join('');
-    g('prevBtn').disabled=i===0;
-    const nst=i+1<activeBook.episodes.length?epState(i+1):null;
-    g('nextBtn').disabled=!nst||nst==='future'||isEpDone();
-    renderStrip();updateStats();updateTimerChip();
-    window.scrollTo(0,0);
-  } catch(e){toast('Error loading episode');}
-}
+    if(!req.file) return res.status(400).json({error:'No file received'});
+    const type=req.file.mimetype.startsWith('video')?'video':'image';
+    const id=uuid();
+    await db.run('INSERT INTO ads (id,name,file,type) VALUES (?,?,?,?)',id,req.body.name||req.file.originalname,req.file.filename,type);
+    res.json({id,name:req.body.name||req.file.originalname});
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+app.get('/api/ads', async (_,res) => {
+  const ads=await db.all('SELECT * FROM ads WHERE active=1 ORDER BY created_at DESC');
+  res.json(ads.map(a=>({...a,url:'/uploads/ads/'+a.file})));
+});
+app.get('/api/ads/random', async (_,res) => {
+  const ads=await db.all('SELECT * FROM ads WHERE active=1');
+  if(!ads.length) return res.json(null);
+  const ad=ads[Math.floor(Math.random()*ads.length)];
+  res.json({...ad,url:'/uploads/ads/'+ad.file});
+});
+app.delete('/api/ads/:id', admin, async (req,res) => {
+  const ad=await db.get('SELECT * FROM ads WHERE id=?',req.params.id);
+  if(ad?.file){try{fs.unlinkSync('uploads/ads/'+ad.file);}catch{}}
+  await db.run('DELETE FROM ads WHERE id=?',req.params.id);
+  res.json({ok:true});
+});
 
-async function readerNext() {
-  const next=(bookProg.current_ep||0)+1;
-  if(next>=activeBook.episodes.length)return;
-  const done=bookProg.done_eps||[];
-  if(!done.includes(bookProg.current_ep))done.push(bookProg.current_ep);
-  bookProg.done_eps=done;
-  await markEpDone();
-  await saveProgress(activeBook.id, bookProg.current_ep, done);
-  if(epState(next)==='future')return;
-  if(isDayDone()){showReaderSection('daydone');startDayTimer();renderStrip();updateStats();return;}
-  showReaderSection('ad');
-  g('adContext').textContent='Episode break';
-  showAd(async()=>{showReaderSection('reader');await loadEpisode(next);startTick();});
-}
-function readerPrev(){if((bookProg.current_ep||0)>0)loadEpisode((bookProg.current_ep||0)-1);}
-function showReaderSection(n){
-  g('adSection').style.display=n==='ad'?'block':'none';
-  g('dayDoneSection').style.display=n==='daydone'?'block':'none';
-  g('readerMain').style.display=n==='reader'?'block':'none';
-}
-
-// ── Stats ─────────────────────────────────────────────────────
-function updateStats() {
-  const tl=eTL(),secs=Math.min(daily?.secs_watched||0,tl),tp=(secs/tl)*100;
-  g('statTime').textContent=Math.floor(secs/60)+' / '+Math.floor(tl/60)+' min';
-  const tf=g('statTimeFill');tf.style.width=tp+'%';tf.className='stat-fill t'+(tp>=100?' full':tp>=80?' warn':'');
-  const el=eEL(),eps=Math.min(daily?.eps_today||0,el),ep=(eps/el)*100;
-  g('statEps').textContent=eps+' / '+el;
-  g('statEpsFill').style.width=ep+'%';
-  g('sessionFill').style.width=tp+'%';g('sessionFill').className='ad-fill'+(tp>=80?' full':tp>=50?' warn':'');
-  g('adBarTime').textContent=Math.floor(secs/60)+' / '+Math.floor(tl/60)+' min';
-  AD_TRIGGERS.forEach((t,i)=>{const el=g(['mk10','mk30','mk60'][i]);if(el)el.className='ad-marker'+((daily?.ads_hit||[]).includes(t)?' hit':'');});
-}
-function updateTimerChip() {
-  const chip=g('timerChip');
-  if(isEpDone()){chip.className='timer-chip lk';chip.textContent=' 6 episodes done';return;}
-  if(isTimeDone()){chip.className='timer-chip lk';chip.textContent=' Time up';return;}
-  const rem=Math.max(0,eTL()-(daily?.secs_watched||0)),m=Math.floor(rem/60),s=rem%60;
-  chip.className=rem<600?'timer-chip warn':'timer-chip ok';
-  chip.textContent='⏱ '+m+':'+String(s).padStart(2,'0')+' left';
-}
-
-// ── Tick ──────────────────────────────────────────────────────
-function startTick() {
-  clearInterval(tickTimer);
-  tickTimer=setInterval(async()=>{
-    if(g('adSection').style.display!=='none'||g('dayDoneSection').style.display!=='none')return;
-    await tick(10); updateStats(); updateTimerChip();
-    const hits=daily?.ads_hit||[];
-    for(const t of AD_TRIGGERS){
-      if(!hits.includes(t)&&(daily?.secs_watched||0)>=t){
-        await markAdHit(t);clearInterval(tickTimer);
-        const label=t===600?'10 minute break':t===1800?'30 minute break':'1 hour milestone';
-        g('adContext').textContent=label;showReaderSection('ad');
-        showAd(async()=>{showReaderSection('reader');startTick();updateStats();});
-        return;
-      }
-    }
-    if(isDayDone()){clearInterval(tickTimer);showReaderSection('daydone');startDayTimer();renderStrip();}
-  },10000);
-}
-
-// ── Day done ──────────────────────────────────────────────────
-function startDayTimer(){
-  if(isEpDone()&&!isTimeDone()){g('dayDoneTitle').textContent="You've read 6 episodes today!";g('dayDoneDesc').textContent="Come back tomorrow or earn extra episodes now.";}
-  else{g('dayDoneTitle').textContent="That's your hour for today!";g('dayDoneDesc').textContent="Your timer resets automatically tomorrow, or earn more now.";}
-  clearInterval(dayTimer);updateDayDoneTimer();
-  dayTimer=setInterval(async()=>{
-    updateDayDoneTimer();
-    const now=new Date();
-    if(now.getHours()===0&&now.getMinutes()===0){await refreshDaily();if(!isDayDone()){clearInterval(dayTimer);showReaderSection('reader');renderStrip();updateStats();updateTimerChip();loadEpisode(bookProg.current_ep||0);startTick();toast('New day! Timer reset.');}}
-  },1000);
-}
-function updateDayDoneTimer(){
-  const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);
-  const s=Math.floor((mid-now)/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
-  g('dayDoneTimer').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0');
-}
-
-// ── Ad break ──────────────────────────────────────────────────
-async function showAd(afterFn) {
-  afterAdFn=afterFn;
-  let ad=null;
-  try{const r=await fetch(`${API}/api/ads/random`);if(r.ok)ad=await r.json();}catch(e){}
-  g('adName').textContent=ad?ad.name:'Sponsor message';
-  g('adDesc').textContent=ad?ad.description||'':'Thank you for reading with Pagebound.';
-  const wrap=g('adVideoWrap'),ph=g('adPlaceholder');
-  wrap.querySelectorAll('video,img:not(#adPlaceholder img)').forEach(el=>el.remove());
-  if(ad&&ad.url&&ad.type==='video'){
-    ph.style.display='none';
-    const vid=document.createElement('video');vid.src=ad.url;vid.autoplay=true;vid.muted=false;vid.playsInline=true;
-    vid.style.cssText='width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0';
-    wrap.insertBefore(vid,g('adCountdownOverlay'));
-    vid.addEventListener('loadedmetadata',()=>startAdCountdown(Math.ceil(vid.duration)||15,()=>{vid.pause();vid.remove();ph.style.display='flex';finishAd();}));
-    vid.addEventListener('ended',()=>{clearInterval(adTimer);vid.remove();ph.style.display='flex';finishAd();});
-    vid.addEventListener('error',()=>{vid.remove();ph.style.display='flex';startAdCountdown(3,finishAd);});
-  } else if(ad&&ad.url){
-    ph.style.display='none';
-    const img=document.createElement('img');img.src=ad.url;
-    img.style.cssText='width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0';
-    wrap.insertBefore(img,g('adCountdownOverlay'));
-    startAdCountdown(15,()=>{img.remove();ph.style.display='flex';finishAd();});
-  } else {
-    g('adPlaceholderName').textContent=ad?ad.name:'Sponsor message';
-    ph.style.display='flex';startAdCountdown(10,finishAd);
-  }
-}
-function startAdCountdown(dur,onDone){
-  clearInterval(adTimer);let secs=dur;
-  const ring=g('adRingSmall'),count=g('adCountNum'),circ=37.7;
-  const upd=()=>{ring.style.strokeDashoffset=circ*(1-secs/dur);count.textContent=secs;};upd();
-  adTimer=setInterval(()=>{secs--;upd();if(secs<=0){clearInterval(adTimer);onDone();}},1000);
-}
-function finishAd(){if(afterAdFn){afterAdFn();afterAdFn=null;}}
-
-// ── Admin — Books ─────────────────────────────────────────────
-function previewCover(inp){
-  if(!inp.files||!inp.files[0])return;
-  pendingCoverFile=inp.files[0];
-  const url=URL.createObjectURL(inp.files[0]);
-  g('coverThumb').src=url;g('coverThumb').style.display='block';
-  g('coverEmpty').style.display='none';g('coverChange').style.display='block';
-}
-function bookFileChosen(inp){
-  if(!inp.files||!inp.files[0])return;
-  pendingBookFile=inp.files[0];
-  g('bookFileRow').classList.add('selected');
-  g('bookFileLabel').textContent=inp.files[0].name;
-  g('bookFileSub').textContent=Math.round(inp.files[0].size/1024)+' KB · ready to add';
-  updateBookBtn();
-}
-function updateBookBtn(){g('addBookBtn').disabled=!(g('bookTitleIn').value.trim()&&g('bookAuthorIn').value.trim()&&pendingBookFile);}
-
-async function readFileAsText(file) {
-  const ext=file.name.split('.').pop().toLowerCase();
-  if(ext==='txt'||file.type==='text/plain'){
-    return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Could not read file'));r.readAsText(file,'utf-8');});
-  }
-  if(ext==='epub'||file.type==='application/epub+zip'){
-    if(!window.JSZip){await new Promise(r=>setTimeout(r,1000)); if(!window.JSZip)throw new Error('EPUB support failed to load. Please refresh the page and try again.');}
-    const buf=await file.arrayBuffer();
-    const zip=await window.JSZip.loadAsync(buf);
-    const containerXml=await zip.file('META-INF/container.xml')?.async('text')||'';
-    let opfPath='OEBPS/content.opf';
-    const m=containerXml.match(/full-path="([^"]+\.opf)"/);
-    if(m)opfPath=m[1];
-    const opfText=await zip.file(opfPath)?.async('text')||'';
-    const basePath=opfPath.includes('/')?opfPath.split('/').slice(0,-1).join('/')+'/' :'';
-    const idrefs=[...opfText.matchAll(/itemref[^>]+idref="([^"]+)"/g)].map(m=>m[1]);
-    const idToHref={};
-    for(const m of opfText.matchAll(/item[^>]+id="([^"]+)"[^>]+href="([^"]+)"/g))idToHref[m[1]]=m[2];
-    const hrefs=idrefs.map(id=>idToHref[id]).filter(Boolean);
-    const allHrefs=hrefs.length?hrefs:Object.values(idToHref).filter(h=>/\.html?|\.xhtml/.test(h));
-    let txt='';
-    for(const href of allHrefs){
-      let html='';
-      for(const p of[basePath+href,href]){try{html=await zip.file(p)?.async('text')||'';if(html)break;}catch{}}
-      if(!html)continue;
-      const clean=html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
-        .replace(/<br\s*\/?>/gi,'\n').replace(/<\/p>/gi,'\n\n').replace(/<\/h[1-6]>/gi,'\n\n')
-        .replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
-        .replace(/\n{3,}/g,'\n\n').trim();
-      if(clean)txt+=clean+'\n\n';
-    }
-    if(!txt.trim())throw new Error('Could not extract text from EPUB. Try converting to .txt using Calibre.');
-    return txt;
-  }
-  if(ext==='pdf'||file.type==='application/pdf'){
-    if(!window.pdfjsLib){await new Promise(r=>setTimeout(r,1000)); if(!window.pdfjsLib)throw new Error('PDF support failed to load. Please refresh the page and try again.');}
-    const buf=await file.arrayBuffer();
-    const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
-    let txt='';
-    for(let i=1;i<=pdf.numPages;i++){const page=await pdf.getPage(i);const tc=await page.getTextContent();txt+=tc.items.map(it=>it.str).join(' ')+'\n\n';}
-    if(!txt.trim())throw new Error('Could not extract text from PDF. Try a text-based PDF or convert to .txt.');
-    return txt;
-  }
-  if(['docx','doc'].includes(ext)||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document'){
-    if(!window.mammoth){await new Promise(r=>setTimeout(r,1000)); if(!window.mammoth)throw new Error('DOCX support failed to load. Please refresh the page and try again.');}
-    const buf=await file.arrayBuffer();
-    const result=await window.mammoth.extractRawText({arrayBuffer:buf});
-    if(!result.value.trim())throw new Error('Could not extract text from DOCX.');
-    return result.value;
-  }
-  if(ext==='rtf'){
-    const txt=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Read failed'));r.readAsText(file,'utf-8');});
-    return txt.replace(/\\[a-z]+\d*\s?/g,' ').replace(/[{}\\]/g,' ').replace(/\s{2,}/g,' ').trim();
-  }
-  throw new Error('Unsupported format. Please use .txt, .epub, .pdf, .docx or .rtf');
-}
-
-async function addBook() {
-  const title=g('bookTitleIn').value.trim(),author=g('bookAuthorIn').value.trim();
-  if(!title||!author||!pendingBookFile){toast('Fill in title, author and choose a file');return;}
-  const pw=g('bookProgWrap'),pb=g('bookProgBar');
-  pw.classList.add('on');pb.style.width='10%';
-  try {
-    const text=await readFileAsText(pendingBookFile);
-    pb.style.width='40%';
-    await new Promise(r=>setTimeout(r,30));
-    // Upload to server as txt
-    const blob=new Blob([text],{type:'text/plain'});
-    const fd=new FormData();
-    fd.append('book',blob,'book.txt');
-    fd.append('title',title);fd.append('author',author);
-    fd.append('wordsPerEpisode',g('wpeSelect').value);
-    pb.style.width='60%';
-    const r=await fetch(`${API}/api/books/upload`,{method:'POST',headers:{'x-admin-pass':adminPass},body:fd});
-    const d=await r.json();
-    if(d.error){pw.classList.remove('on');toast('Error: '+d.error);return;}
-    if(pendingCoverFile){
-      const cfd=new FormData();cfd.append('cover',pendingCoverFile);
-      await fetch(`${API}/api/books/${d.bookId}/cover`,{method:'POST',headers:{'x-admin-pass':adminPass},body:cfd});
-    }
-    pb.style.width='100%';await new Promise(r=>setTimeout(r,300));pw.classList.remove('on');
-    // Reset form
-    g('bookTitleIn').value='';g('bookAuthorIn').value='';g('bookFileIn').value='';g('coverFileIn').value='';
-    g('coverThumb').style.display='none';g('coverEmpty').style.display='flex';g('coverChange').style.display='none';
-    g('bookFileRow').classList.remove('selected');g('bookFileLabel').textContent='No book file chosen';g('bookFileSub').textContent='Supports .txt, .epub, .pdf, .docx, .rtf';
-    g('addBookBtn').disabled=true; g('addBookBtn').textContent='+ Add to library'; pendingBookFile=null;pendingCoverFile=null;
-    loadAdminBooks();toast('"'+title+'" added — '+d.totalEpisodes+' episodes');
-  } catch(e){pw.classList.remove('on');toast('Error: '+e.message);}
-}
-
-async function loadAdminBooks(){
-  try{
-    const r=await fetch(`${API}/api/books`);const books=await r.json();
-    g('bookCountBadge').textContent=books.length+' book'+(books.length!==1?'s':'');
-    g('adminBookList').innerHTML=books.length?books.map((b,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${b.title}</p><span>${b.author||''} · ${b.total_episodes} episodes</span></div><button class="del-btn" onclick="deleteBook('${b.id}')"></button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No books yet.</p>';
-  }catch(e){}
-}
-async function deleteBook(id){
-  if(!confirm('Remove this book?'))return;
-  await fetch(`${API}/api/books/${id}`,{method:'DELETE',headers:{'x-admin-pass':adminPass}});
-  loadAdminBooks();toast('Book removed');
-}
-
-// ── Admin — Ads ───────────────────────────────────────────────
-function adFileChosen(inp){
-  if(!inp.files||!inp.files[0])return;
-  pendingAdFile=inp.files[0];
-  const mb=Math.round(inp.files[0].size/1024/1024*10)/10;
-  const warn=g('sizeWarn');
-  if(mb>50){warn.classList.add('show');g('sizeWarnVal').textContent=mb+' MB';}else warn.classList.remove('show');
-  g('adFileRow').classList.add('selected');g('adFileLabel').textContent=inp.files[0].name;
-  g('addAdBtn').disabled=false;
-}
-async function addAd(){
-  if(!pendingAdFile){toast('Choose a file first');return;}
-  const name=g('adNameIn').value.trim()||pendingAdFile.name;
-  const btn=g('addAdBtn');
-  btn.disabled=true; btn.textContent='Uploading...';
-  try {
-    const fd=new FormData();
-    fd.append('ad',pendingAdFile);
-    fd.append('name',name);
-    const r=await fetch(`${API}/api/ads`,{method:'POST',headers:{'x-admin-pass':adminPass},body:fd});
-    let d;
-    try{ d=await r.json(); }catch(e){ toast('Server error — check console'); btn.disabled=false; btn.textContent='+ Add ad to rotation'; return; }
-    if(!r.ok||d.error){ toast('Error: '+(d.error||'Upload failed, status '+r.status)); btn.disabled=false; btn.textContent='+ Add ad to rotation'; return; }
-    g('adNameIn').value=''; g('adFileIn').value=''; g('adFileRow').classList.remove('selected');
-    g('adFileLabel').textContent='No ad file chosen'; g('sizeWarn').classList.remove('show');
-    pendingAdFile=null; loadAdminAds(); toast('"'+name+'" added to rotation');
-  } catch(e){
-    toast('Upload failed: '+e.message);
-  } finally {
-    btn.disabled=false; btn.textContent='+ Add ad to rotation';
-  }
-}
-async function loadAdminAds(){
-  try{
-    const r=await fetch(`${API}/api/ads`);const ads=await r.json();
-    g('adCountBadge').textContent=ads.length+' / 10';
-    g('adminAdList').innerHTML=ads.length?ads.map((a,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${a.name}</p><span>${a.type}</span></div><button class="del-btn" onclick="deleteAd('${a.id}')"></button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No ads yet.</p>';
-  }catch(e){}
-}
-async function deleteAd(id){
-  await fetch(`${API}/api/ads/${id}`,{method:'DELETE',headers:{'x-admin-pass':adminPass}});
-  loadAdminAds();toast('Ad removed');
-}
+// ── Admin verify ──────────────────────────────────────────────
+app.post('/api/admin/verify', (req,res) => {
+  res.json(req.body.password===ADMIN_PASS?{ok:true}:{error:'Wrong password'});
+});
 
 // ── Analytics ─────────────────────────────────────────────────
-async function loadAnalytics(){
-  g('analyticsContent').innerHTML='<div style="text-align:center;padding:40px;color:var(--text-3)">Loading...</div>';
-  try{
-    const r=await fetch(`${API}/api/analytics`,{headers:{'x-admin-pass':adminPass}});
-    if(!r.ok){g('analyticsContent').innerHTML='<div style="text-align:center;padding:40px;color:var(--danger)">Could not load analytics.</div>';return;}
-    const d=await r.json();
-    const fmtTime=s=>s>=3600?Math.round(s/360)/10+'h':Math.round(s/60)+'m';
-    const fmtDate=s=>s?s.slice(5):''; // MM-DD
+app.get('/api/analytics', admin, async (req,res) => {
+  const t=today();
 
-    // Build bar chart data
-    const last14=[];const now=new Date();
-    for(let i=13;i>=0;i--){const d2=new Date(now);d2.setDate(d2.getDate()-i);last14.push(d2.toISOString().split('T')[0]);}
-    const visMap={};(d.dailyVisitors||[]).forEach(v=>visMap[v.date]=v.visitors);
-    const maxVis=Math.max(1,...Object.values(visMap));
+  // Visitors
+  const totalVisitors    = (await db.get('SELECT COUNT(DISTINCT id) as c FROM sessions')).c;
+  const todayVisitors    = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE date(created_at,\'unixepoch\')=?',t)).c;
+  const weekVisitors     = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE created_at>=strftime(\'%s\',\'now\',\'-7 days\')')).c;
 
-    const readMap={};(d.dailyReading||[]).forEach(v=>readMap[v.date]=Math.round(v.secs/60));
-    const maxRead=Math.max(1,...Object.values(readMap));
+  // Readers (people who actually read something)
+  const totalReaders     = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM reading_events')).c;
+  const todayReaders     = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM reading_events WHERE date=?',t)).c;
 
-    g('analyticsContent').innerHTML=`
-      <div class="analytics-grid">
-        <div class="metric-card"><div class="metric-val">${d.totalVisitors.toLocaleString()}</div><div class="metric-label">Total visitors</div><div class="metric-sub">+${d.todayVisitors} today</div></div>
-        <div class="metric-card"><div class="metric-val">${d.weekVisitors}</div><div class="metric-label">This week</div><div class="metric-sub">Unique sessions</div></div>
-        <div class="metric-card"><div class="metric-val">${d.totalReaders.toLocaleString()}</div><div class="metric-label">Readers</div><div class="metric-sub">+${d.todayReaders} today</div></div>
-        <div class="metric-card"><div class="metric-val">${fmtTime(d.avgSecsPerDay)}</div><div class="metric-label">Avg session</div><div class="metric-sub">Per reading day</div></div>
-        <div class="metric-card"><div class="metric-val">${fmtTime(d.todaySecsRead)}</div><div class="metric-label">Read today</div><div class="metric-sub">${fmtTime(d.totalSecsRead)} total</div></div>
-        <div class="metric-card"><div class="metric-val">${d.todayEpsDone}</div><div class="metric-label">Episodes done today</div><div class="metric-sub">${d.totalEpsDone} total</div></div>
-      </div>
+  // Time spent
+  const avgSecsPerDay    = (await db.get('SELECT AVG(secs_watched) as a FROM daily_state WHERE secs_watched>0')).a||0;
+  const totalSecsRead    = (await db.get('SELECT SUM(secs_read) as s FROM reading_events')).s||0;
+  const todaySecsRead    = (await db.get('SELECT SUM(secs_read) as s FROM reading_events WHERE date=?',t)).s||0;
 
-      <div class="chart-card">
-        <div class="chart-title"> Daily visitors — last 14 days</div>
-        <div class="bar-chart">
-          ${last14.map(date=>`<div class="bar-col">
-            <div class="bar blue" style="height:${Math.max(4,((visMap[date]||0)/maxVis)*70)}px" title="${visMap[date]||0} visitors on ${date}"></div>
-            <div class="bar-label">${fmtDate(date)}</div>
-          </div>`).join('')}
-        </div>
-      </div>
+  // Episodes
+  const totalEpsDone     = (await db.get('SELECT SUM(eps_today) as s FROM daily_state')).s||0;
+  const todayEpsDone     = (await db.get('SELECT SUM(eps_today) as s FROM daily_state WHERE date=?',t)).s||0;
 
-      <div class="chart-card">
-        <div class="chart-title"> Daily reading time (minutes) — last 14 days</div>
-        <div class="bar-chart">
-          ${last14.map(date=>`<div class="bar-col">
-            <div class="bar" style="height:${Math.max(4,((readMap[date]||0)/maxRead)*70)}px;background:var(--success-l);border-top:2px solid var(--success)" title="${readMap[date]||0} minutes on ${date}"></div>
-            <div class="bar-label">${fmtDate(date)}</div>
-          </div>`).join('')}
-        </div>
-      </div>
+  // Popular books
+  const popularBooks = await db.all(`
+    SELECT b.title, b.author, COUNT(DISTINCT re.session_id) as readers,
+           SUM(re.secs_read) as total_secs, COUNT(re.id) as events
+    FROM books b
+    LEFT JOIN reading_events re ON b.id=re.book_id
+    GROUP BY b.id ORDER BY readers DESC LIMIT 10
+  `);
 
-      ${d.popularBooks.length?`
-      <div class="chart-card">
-        <div class="chart-title"> Most read books</div>
-        ${d.popularBooks.map((b,i)=>`<div class="pop-row">
-          <div class="pop-rank">${i+1}</div>
-          <div class="pop-info"><p>${b.title}</p><span>${b.author||'Unknown'} · ${b.readers} readers</span></div>
-          <div class="pop-stat">${fmtTime(b.total_secs||0)}</div>
-        </div>`).join('')}
-      </div>`:''}
+  // Daily visitors last 14 days
+  const dailyVisitors = await db.all(`
+    SELECT date(created_at,'unixepoch') as date, COUNT(DISTINCT session_id) as visitors
+    FROM page_views
+    WHERE created_at>=strftime('%s','now','-14 days')
+    GROUP BY date(created_at,'unixepoch')
+    ORDER BY date ASC
+  `);
 
-      <div class="chart-card">
-        <div class="chart-title"> Recent sessions</div>
-        <table class="sessions-table">
-          <thead><tr><th>Session</th><th>Visits</th><th>Read today</th><th>Episodes</th><th>Last seen</th></tr></thead>
-          <tbody>
-            ${d.recentSessions.map(s=>{
-              const isToday=new Date(s.last_seen*1000).toDateString()===new Date().toDateString();
-              return `<tr>
-                <td>${isToday?'<span class="live-dot"></span>':''}<span style="font-family:monospace;font-size:11px">${s.id.slice(0,8)}...</span></td>
-                <td>${s.total_visits}</td>
-                <td>${s.secs_watched?fmtTime(s.secs_watched):'-'}</td>
-                <td>${s.eps_today||0}</td>
-                <td>${new Date(s.last_seen*1000).toLocaleDateString()}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>`;
-  }catch(e){g('analyticsContent').innerHTML='<div style="text-align:center;padding:40px;color:var(--danger)">Error loading analytics: '+e.message+'</div>';}
-}
+  // Daily reading time last 14 days
+  const dailyReading = await db.all(`
+    SELECT date, SUM(secs_read) as secs, COUNT(DISTINCT session_id) as readers
+    FROM reading_events
+    WHERE created_at>=strftime('%s','now','-14 days')
+    GROUP BY date ORDER BY date ASC
+  `);
 
-boot();
-</script>
-</body>
-</html>
+  // Recent sessions
+  const recentSessions = await db.all(`
+    SELECT s.id, s.ip, s.first_seen, s.last_seen, s.total_visits,
+           ds.secs_watched, ds.eps_today
+    FROM sessions s
+    LEFT JOIN daily_state ds ON s.id=ds.session_id AND ds.date=?
+    ORDER BY s.last_seen DESC LIMIT 20
+  `, t);
+
+  res.json({
+    totalVisitors, todayVisitors, weekVisitors,
+    totalReaders, todayReaders,
+    avgSecsPerDay: Math.round(avgSecsPerDay),
+    totalSecsRead, todaySecsRead,
+    totalEpsDone, todayEpsDone,
+    popularBooks, dailyVisitors, dailyReading, recentSessions
+  });
+});
+
+// ── Frontend ──────────────────────────────────────────────────
+// All these serve index.html — JS router handles the rest
+app.get('/admin',    (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
+app.get('/book/:id', (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
+app.get('*',         (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
+
+initDB().then(() => app.listen(PORT, () => console.log(`Pagebound on port ${PORT}`)));
