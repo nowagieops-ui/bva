@@ -157,7 +157,7 @@ html,body{
 
 /* LIBRARY SECTION */
 .library{
-  padding:40px 0 60px;
+  padding:32px 0 80px;
 }
 .lib-head{
   display:flex;
@@ -167,15 +167,15 @@ html,body{
 }
 .section-title{
   font-size:11px;
-  font-weight:600;
-  letter-spacing:.08em;
+  font-weight:700;
+  letter-spacing:.1em;
   text-transform:uppercase;
   color:var(--ink3);
 }
 .book-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
-  gap:20px;
+  grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:16px;
 }
 @media(max-width:500px){
   .book-grid{grid-template-columns:repeat(2,1fr);gap:14px;}
@@ -186,37 +186,57 @@ html,body{
   border-radius:var(--r);
   overflow:hidden;
   cursor:pointer;
-  transition:transform .15s,box-shadow .15s,border-color .15s;
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
+  box-shadow:0 1px 3px rgba(0,0,0,.04);
 }
 .book-card:hover{
-  transform:translateY(-3px);
-  box-shadow:0 8px 24px rgba(0,0,0,.09);
-  border-color:var(--blue-b);
+  transform:translateY(-4px);
+  box-shadow:0 12px 32px rgba(0,0,0,.1);
+  border-color:var(--blue);
 }
 .book-cover{
-  aspect-ratio:3/4;
-  background:linear-gradient(135deg,#e8e4dc 0%,#d4cfc7 100%);
-  display:flex;align-items:center;justify-content:center;
+  aspect-ratio:2/3;
   position:relative;overflow:hidden;
+  background:linear-gradient(155deg,#e8e4dc 0%,#cdc8bf 100%);
+  display:flex;align-items:center;justify-content:center;
 }
-.book-cover img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
-.book-cover-icon{opacity:.3}
-.book-cover-icon svg{width:48px;height:48px;color:#6b6760}
-.book-body{padding:14px}
-.book-title{font-size:14px;font-weight:600;line-height:1.35;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.book-author{font-size:12px;color:var(--ink3);margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.book-cover img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;display:block}
+.book-cover-icon{
+  width:100%;height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;
+}
+.book-cover-icon svg{width:36px;height:36px;color:rgba(107,103,96,.35)}
+.book-body{padding:14px 16px 16px}
+.book-title{
+  font-family:var(--serif);
+  font-size:16px;font-weight:400;line-height:1.3;
+  margin-bottom:4px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.book-author{
+  font-size:12px;font-weight:500;
+  color:var(--ink3);
+  margin-bottom:12px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-transform:uppercase;letter-spacing:.05em;
+}
 .book-footer{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .ep-badge{
-  font-size:11px;font-weight:500;
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:11px;font-weight:600;
   background:var(--bg);border:1px solid var(--line2);
-  border-radius:6px;padding:3px 8px;color:var(--ink2);
+  border-radius:100px;padding:4px 10px;color:var(--ink2);
 }
+.ep-badge svg{width:11px;height:11px;color:var(--ink3)}
 .continue-pill{
-  font-size:11px;font-weight:500;
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11px;font-weight:600;
   background:var(--green-l);color:var(--green);
-  border-radius:6px;padding:3px 8px;
+  border-radius:100px;padding:4px 10px;
 }
-.book-progress{height:2px;background:var(--bg);border-radius:2px;margin-top:10px;overflow:hidden}
+.continue-pill svg{width:10px;height:10px}
+.book-progress{height:2px;background:var(--line);border-radius:2px;margin-top:12px;overflow:hidden}
 .book-progress-fill{height:100%;background:var(--blue);border-radius:2px;transition:width .4s}
 
 /* ── READER ── */
@@ -615,10 +635,6 @@ html,body{
   <div id="emptyHero" style="display:none">
     <div class="hero">
       <div class="inner">
-        <div class="hero-kicker">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h12v10H2z"/><path d="M8 3v10"/></svg>
-          Reading, reimagined
-        </div>
         <h1>Reading is better<br>when it feels like a <em>treat</em></h1>
         <p class="hero-sub">Short daily episodes. Real books. Zero overwhelm. We break every book into bite-sized chapters so you actually finish what you start.</p>
         <div class="hero-pills">
@@ -927,8 +943,14 @@ async function boot() {
     await refreshDaily();
   } catch(e) { console.warn('Session init failed:', e); }
   // Route based on URL path
-  if (window.location.pathname === '/admin') {
+  const path = window.location.pathname;
+  if (path === '/admin') {
     toggleAdmin();
+  } else if (path.startsWith('/book/')) {
+    const bookId = path.replace('/book/', '');
+    // Hide home, go straight to reader
+    g('pageHome').style.display = 'none';
+    openBook(bookId);
   } else {
     loadBooks();
   }
@@ -994,6 +1016,21 @@ async function saveProgress(id,ep,done) {
 }
 
 // ── Home ──────────────────────────────────────────────────────
+function coverColor(title) {
+  const colors = [
+    'linear-gradient(135deg,#1e3a5f,#2d6a9f)',
+    'linear-gradient(135deg,#2d4a1e,#4a7c2d)',
+    'linear-gradient(135deg,#4a1e2d,#9f2d4a)',
+    'linear-gradient(135deg,#3a2d1e,#7c5a2d)',
+    'linear-gradient(135deg,#1e2d4a,#2d4a9f)',
+    'linear-gradient(135deg,#4a3a1e,#9f7c2d)',
+    'linear-gradient(135deg,#2d1e4a,#6a2d9f)',
+    'linear-gradient(135deg,#1e4a4a,#2d9f9f)',
+  ];
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+}
 async function loadBooks() {
   try {
     const r = await fetch(`${API}/api/books`);
@@ -1003,15 +1040,21 @@ async function loadBooks() {
     g('emptyHero').style.display='none';
     g('librarySection').style.display='block';
     g('bookGrid').innerHTML = books.map(b => {
-      return `<div class="book-card" onclick="openBook('${b.id}')">
-        <div class="book-cover">
-          ${b.coverUrl?`<img src="${b.coverUrl}" alt="${b.title}">`:'<span class="book-cover-placeholder"></span>'}
+      return `<div class="book-card" onclick="openBookNewTab('${b.id}')" style="text-decoration:none;display:block">
+        <div class="book-cover" style="background:${b.coverUrl?'transparent':coverColor(b.title)}">
+          ${b.coverUrl
+            ? `<img src="${b.coverUrl}" alt="${b.title}">`
+            : `<div class="book-cover-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>`
+          }
         </div>
-        <div class="book-card-body">
-          <div class="book-card-title">${b.title}</div>
-          <div class="book-card-author">${b.author||''}</div>
-          <div class="book-card-meta">
-            <span class="book-card-eps">${b.total_episodes} episodes</span>
+        <div class="book-body">
+          <div class="book-title">${b.title}</div>
+          <div class="book-author">${b.author || 'Unknown author'}</div>
+          <div class="book-footer">
+            <span class="ep-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              ${b.total_episodes} ep
+            </span>
           </div>
         </div>
       </div>`;
@@ -1022,6 +1065,10 @@ async function loadBooks() {
 function showEmptyHero() {
   g('emptyHero').style.display='block';
   g('librarySection').style.display='none';
+}
+
+function openBookNewTab(id) {
+  window.open('/book/' + id, '_blank');
 }
 
 async function openBook(id) {
