@@ -32,6 +32,9 @@
     color: #333;
   }
 }
+/* Force overlay visible on screenshot attempt via CSS */
+#ssOverlay { -webkit-user-select:none; user-select:none; }
+.reader-body, .reader-wrap { -webkit-user-select:none; user-select:none; }
 </style>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -74,9 +77,9 @@ html,body{
   min-height:100vh;
 }
 .inner{
-  max-width:960px;
+  max-width:1200px;
   margin:0 auto;
-  padding:0 24px;
+  padding:0 32px;
 }
 @media(max-width:600px){
   .inner{padding:0 16px;}
@@ -199,8 +202,8 @@ html,body{
 }
 .book-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
-  gap:20px;
+  grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:24px;
 }
 @media(max-width:500px){
   .book-grid{grid-template-columns:repeat(2,1fr);gap:12px;}
@@ -222,7 +225,7 @@ html,body{
 .book-cover{
   aspect-ratio:2/3;
   position:relative;overflow:hidden;
-  background:linear-gradient(155deg,#e8e4dc 0%,#cdc8bf 100%);
+  background:linear-gradient(155deg,#e0dbd2 0%,#c8c3ba 100%);
   display:flex;align-items:center;justify-content:center;
 }
 .book-cover img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;display:block}
@@ -359,9 +362,9 @@ html,body{
   padding:5px 10px;border-radius:100px;
   white-space:nowrap;
 }
-.timer-badge.ok{background:var(--green-l);color:var(--green)}
-.timer-badge.warn{background:var(--amber-l);color:var(--amber)}
-.timer-badge.lk{background:var(--red-l);color:var(--red)}
+.timer-badge.ok{background:#2563eb;color:#fff;box-shadow:0 1px 6px rgba(37,99,235,.35)}
+.timer-badge.warn{background:#b45309;color:#fff;box-shadow:0 1px 4px rgba(180,83,9,.25)}
+.timer-badge.lk{background:#dc2626;color:#fff;box-shadow:0 1px 4px rgba(220,38,38,.25)}
 .timer-badge svg{width:13px;height:13px;flex-shrink:0}
 .progress-rail{height:2px;background:var(--line);border-radius:2px;margin:12px 0 28px}
 .progress-fill{height:2px;background:var(--blue);border-radius:2px;transition:width .5s}
@@ -947,6 +950,12 @@ html,body{
   </div>
 </div>
 
+<!-- Screenshot protection overlay -->
+<div id="ssOverlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#faf9f7;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+  <div style="font-family:'Fraunces',Georgia,serif;font-size:22px;font-weight:400;color:#111">This content is protected</div>
+  <div style="font-size:14px;color:#6b6760;max-width:300px;text-align:center;line-height:1.6">Screenshots and screen recordings of Pagebound content are not permitted.</div>
+</div>
 </div><!-- .app -->
 <div class="toast" id="toast"></div>
 <script>
@@ -1563,82 +1572,59 @@ boot();
 </script>
 
 <script>
-// ── Screenshot & screen recording deterrent ───────────────────
+// ── Screenshot deterrent ──────────────────────────────────────
 
-// 1. Blur content when window loses focus (PrintScreen often triggers this)
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') {
-    const rb = document.getElementById('readerBody');
-    if (rb) rb.style.filter = 'blur(12px)';
-  } else {
-    const rb = document.getElementById('readerBody');
-    if (rb) rb.style.filter = '';
-  }
-});
+function isReading() {
+  return document.getElementById('pageReader') &&
+         document.getElementById('pageReader').style.display !== 'none' &&
+         document.getElementById('readerMain') &&
+         document.getElementById('readerMain').style.display !== 'none';
+}
 
-// 2. Detect PrintScreen key and blur instantly
-document.addEventListener('keyup', (e) => {
+function showProtectOverlay() {
+  if (!isReading()) return;
+  let ov = document.getElementById('ssOverlay');
+  if (!ov) return;
+  ov.style.display = 'flex';
+}
+function hideProtectOverlay() {
+  const ov = document.getElementById('ssOverlay');
+  if (ov) ov.style.display = 'none';
+}
+
+// PrintScreen — blur immediately, wipe clipboard
+document.addEventListener('keyup', e => {
   if (e.key === 'PrintScreen') {
-    const rb = document.getElementById('readerBody');
-    if (!rb) return;
-    rb.style.filter = 'blur(12px)';
-    // Copy blank to clipboard to ruin screenshot
-    navigator.clipboard?.writeText('').catch(()=>{});
-    setTimeout(() => { rb.style.filter = ''; }, 2000);
+    showProtectOverlay();
+    try { navigator.clipboard.writeText(''); } catch(e) {}
+    setTimeout(hideProtectOverlay, 2500);
   }
 });
 
-// 3. Block common shortcuts: Ctrl+P (print), Ctrl+S (save)
-document.addEventListener('keydown', (e) => {
-  const ctrl = e.ctrlKey || e.metaKey;
-  if (ctrl && (e.key === 'p' || e.key === 's' || e.key === 'u')) {
-    e.preventDefault();
-    return false;
-  }
-  // Block F12 devtools
-  if (e.key === 'F12') {
-    e.preventDefault();
-    return false;
-  }
+// Block Ctrl+P, Ctrl+S, Ctrl+U
+document.addEventListener('keydown', e => {
+  const c = e.ctrlKey || e.metaKey;
+  if (c && ['p','s','u','a'].includes(e.key)) { e.preventDefault(); return false; }
 });
 
-// 4. Block right click on reader content
-document.addEventListener('contextmenu', (e) => {
-  if (document.getElementById('pageReader')?.style.display !== 'none') {
-    e.preventDefault();
-    return false;
-  }
+// Right click on reader = block
+document.addEventListener('contextmenu', e => {
+  if (isReading()) { e.preventDefault(); return false; }
 });
 
-// 5. CSS blur overlay on the reader page using the Page Visibility API
-// When screen capture software often triggers visibility changes
-let blurTimeout;
-window.addEventListener('blur', () => {
-  blurTimeout = setTimeout(() => {
-    const rb = document.getElementById('readerBody');
-    if (rb && document.getElementById('pageReader')?.style.display !== 'none') {
-      rb.style.filter = 'blur(8px)';
-    }
-  }, 300);
-});
-window.addEventListener('focus', () => {
-  clearTimeout(blurTimeout);
-  const rb = document.getElementById('readerBody');
-  if (rb) rb.style.filter = '';
+// Tab switch / screen capture detection
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') showProtectOverlay();
+  else setTimeout(hideProtectOverlay, 800);
 });
 
-// 6. Detect screen capture API (Chrome only, but catches it where supported)
-if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
-  const origGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
-  navigator.mediaDevices.getDisplayMedia = async (opts) => {
-    const rb = document.getElementById('readerBody');
-    if (rb) rb.style.filter = 'blur(12px)';
-    const stream = await origGetDisplayMedia(opts);
-    stream.getTracks().forEach(track => {
-      track.addEventListener('ended', () => {
-        if (rb) rb.style.filter = '';
-      });
-    });
+// Screen capture API override (Chromium)
+if (navigator.mediaDevices?.getDisplayMedia) {
+  const orig = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getDisplayMedia = async opts => {
+    showProtectOverlay();
+    const stream = await orig(opts);
+    stream.getTracks().forEach(t => t.addEventListener('ended', hideProtectOverlay));
     return stream;
   };
 }
