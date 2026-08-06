@@ -386,6 +386,15 @@ html,body{
   .nav-btn{padding:8px 14px;font-size:13px;}
 }
 .reader-body p{margin-bottom:1.4em}
+.reader-body em{font-style:italic}
+.reader-body strong{font-weight:700}
+.reader-body u{text-decoration:underline}
+.reader-body p[style*="font-weight:600"]{
+  font-family:var(--serif);
+  font-size:1.1em;
+  margin-top:2em;
+  margin-bottom:.6em;
+}
 .reader-nav{
   display:flex;align-items:center;justify-content:space-between;
   gap:8px;margin-top:40px;padding-top:18px;
@@ -1175,7 +1184,22 @@ async function loadEpisode(i) {
     g('readerTitle').textContent='Episode '+ep.episode_number+' — '+ep.title;
     g('epCounter').textContent=(i+1)+' / '+activeBook.episodes.length;
     g('progressFill').style.width=(((i+1)/activeBook.episodes.length)*100)+'%';
-    g('readerBody').innerHTML=data.content.split(/\n\n+/).filter(Boolean).map(p=>'<p>'+p.trim()+'</p>').join('');
+    // Render content — handle both plain text and HTML (from EPUB)
+const content = data.content || '';
+const isHtml = /<p>|<em>|<strong>|<p class/.test(content);
+if(isHtml){
+  // Already has HTML structure — sanitize and render directly
+  g('readerBody').innerHTML = content
+    .replace(/<p class="ep-heading">/g,'<p style="font-weight:600;font-size:1.05em;margin-top:1.8em">')
+    .split(/\n\n+/)
+    .map(block => block.trim())
+    .filter(Boolean)
+    .map(block => block.startsWith('<p') ? block : '<p>'+block+'</p>')
+    .join('');
+} else {
+  // Plain text — wrap paragraphs normally
+  g('readerBody').innerHTML = content.split(/\n\n+/).filter(Boolean).map(p=>'<p>'+p.trim()+'</p>').join('');
+}
     g('prevBtn').disabled=i===0;
     const nst=i+1<activeBook.episodes.length?epState(i+1):null;
     g('nextBtn').disabled=!nst||nst==='future'||isEpDone();
@@ -1363,14 +1387,47 @@ async function readFileAsText(file) {
     const allHrefs=hrefs.length?hrefs:Object.values(idToHref).filter(h=>/\.html?|\.xhtml/.test(h));
     let txt='';
     for(const href of allHrefs){
-      let html='';
-      for(const p of[basePath+href,href]){try{html=await zip.file(p)?.async('text')||'';if(html)break;}catch{}}
-      if(!html)continue;
-      const clean=html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'')
-        .replace(/<br\s*\/?>/gi,'\n').replace(/<\/p>/gi,'\n\n').replace(/<\/h[1-6]>/gi,'\n\n')
-        .replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+      let rawHtml='';
+      for(const p of[basePath+href,href]){try{rawHtml=await zip.file(p)?.async('text')||'';if(rawHtml)break;}catch{}}
+      if(!rawHtml)continue;
+      // Remove style/script blocks entirely
+      let cleaned=rawHtml
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'');
+      // Preserve formatting tags — convert to safe HTML we allow in reader
+      cleaned=cleaned
+        // headings → paragraph with class
+        .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi,'<p class="ep-heading">$1</p>')
+        // italic/emphasis — keep as <em>
+        .replace(/<(i|em)[^>]*>/gi,'<em>')
+        .replace(/<\/(i|em)>/gi,'</em>')
+        // bold/strong — keep as <strong>
+        .replace(/<(b|strong)[^>]*>/gi,'<strong>')
+        .replace(/<\/(b|strong)>/gi,'</strong>')
+        // underline
+        .replace(/<u[^>]*>/gi,'<u>')
+        .replace(/<\/u>/gi,'</u>')
+        // line breaks
+        .replace(/<br\s*\/?>/gi,'\n')
+        // paragraphs — preserve as blocks
+        .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi,(m,inner)=>{
+          // clean the inner content of remaining tags except allowed ones
+          const safe=inner.replace(/<(?!\/?(?:em|strong|u|span)\b)[^>]+>/gi,'');
+          return safe.trim()?'<p>'+safe+'</p>':'';
+        })
+        // Remove all remaining unknown tags
+        .replace(/<(?!\/?(em|strong|u|p|span)\b)[^>]+>/gi,'')
+        // Decode entities
+        .replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<')
+        .replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+        .replace(/&mdash;/g,'—').replace(/&ndash;/g,'–').replace(/&ldquo;/g,'"')
+        .replace(/&rdquo;/g,'"').replace(/&lsquo;/g,"'").replace(/&rsquo;/g,"'")
+        .replace(/&hellip;/g,'…').replace(/&#8220;/g,'"').replace(/&#8221;/g,'"')
+        .replace(/&#8216;/g,"'").replace(/&#8217;/g,"'").replace(/&#8212;/g,'—')
+        .replace(/&#8211;/g,'–').replace(/&#160;/g,' ')
+        // Clean up excessive whitespace but keep paragraph breaks
         .replace(/\n{3,}/g,'\n\n').trim();
-      if(clean)txt+=clean+'\n\n';
+      if(cleaned) txt+=cleaned+'\n\n';
     }
     if(!txt.trim())throw new Error('Could not extract text from EPUB. Try converting to .txt using Calibre.');
     return txt;
