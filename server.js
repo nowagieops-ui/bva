@@ -212,31 +212,88 @@ app.post('/api/progress/:contentId', async (req,res) => {
 
 // ── Books ─────────────────────────────────────────────────────
 function parseBook(text,wpe){
-  const cleaned=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n{4,}/g,'\n\n\n').trim();
-  const paras=cleaned.split(/\n\n+/).map(p=>p.trim()).filter(Boolean);
-  const eps=[];let cur=[],cw=0,n=1;
-  for(const p of paras){const wc=p.split(/\s+/).length;if(cw>0&&cw+wc>wpe*1.15){eps.push(makeEp(n,cur));n++;cur=[p];cw=wc;}else{cur.push(p);cw+=wc;}}
-  if(cur.length)eps.push(makeEp(n,cur));
-  return eps;
+  try {
+    // Limit to 5MB of text to prevent memory issues
+    if(text.length>5*1024*1024) text=text.slice(0,5*1024*1024);
+    const cleaned=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n{4,}/g,'\n\n\n').trim();
+    const paras=cleaned.split(/\n\n+/).map(p=>p.trim()).filter(Boolean);
+    const eps=[];let cur=[],cw=0,n=1;
+    for(const p of paras){
+      const wc=p.split(/\s+/).length;
+      if(cw>0&&cw+wc>wpe*1.15){eps.push(makeEp(n,cur));n++;cur=[p];cw=wc;}
+      else{cur.push(p);cw+=wc;}
+    }
+    if(cur.length)eps.push(makeEp(n,cur));
+    if(eps.length===0) throw new Error('No content found in file');
+    return eps;
+  } catch(e) {
+    console.error('parseBook error:',e.message);
+    throw e;
+  }
 }
 function makeEp(n,paras){
-  const content=paras.join('\n\n');let title='';
-  for(const p of paras){const t=p.trim();if(t.length>10&&!/^(chapter|part|book|section|prologue|epilogue|introduction|preface|\d+\.?\s*$)/i.test(t)){title=t.split(/\s+/).slice(0,6).join(' ').replace(/[,;:!?—–]$/,'')+(t.split(/\s+/).length>6?'...':'');break;}}
-  return{n,title:title||'Episode '+n,content,wordCount:content.split(/\s+/).length};
+  try {
+    const content=paras.join('\n\n');
+    let title='';
+    for(const p of paras){
+      const t=p.trim();
+      if(t.length>10&&t.length<200&&!/^(chapter|part|book|section|prologue|epilogue|introduction|preface|\d+\.?\s*$)/i.test(t)){
+        title=t.split(/\s+/).slice(0,6).join(' ').replace(/[,;:!?—–]$/,'')+(t.split(/\s+/).length>6?'...':'');
+        break;
+      }
+    }
+    return{n,title:title||'Episode '+n,content,wordCount:content.split(/\s+/).length};
+  } catch(e) {
+    return{n,title:'Episode '+n,content:paras.join('\n\n'),wordCount:0};
+  }
 }
 
-app.post('/api/books/upload', admin, bookUp.single('book'), async (req,res) => {
+app.post('/api/books/upload', admin, (req,res,next)=>{
+  bookUp.single('book')(req,res,err=>{
+    if(err) return res.status(400).json({error:err.message||'Upload failed'});
+    next();
+  });
+}, async (req,res) => {
+  const filePath = req.file?.path;
   try{
     const {title,author,wordsPerEpisode=2000}=req.body;
-    if(!req.file||!title) return res.status(400).json({error:'Missing file or title'});
-    const text=fs.readFileSync(req.file.path,'utf8');
-    fs.unlinkSync(req.file.path);
-    const eps=parseBook(text,parseInt(wordsPerEpisode));
+    if(!req.file||!title){
+      if(filePath) try{fs.unlinkSync(filePath);}catch{}
+      return res.status(400).json({error:'Missing file or title'});
+    }
+    // Read file safely
+    let text;
+    try{
+      text=fs.readFileSync(filePath,'utf8');
+    }catch(e){
+      try{text=fs.readFileSync(filePath,'latin1');}catch(e2){
+        return res.status(400).json({error:'Could not read file — try saving as UTF-8 text'});
+      }
+    }
+    try{fs.unlinkSync(filePath);}catch{}
+
+    const wpe=Math.max(500,Math.min(5000,parseInt(wordsPerEpisode)||2000));
+    const eps=parseBook(text,wpe);
     const id=uuid();
-    await db.run('INSERT INTO books (id,title,author,words_per_episode,total_episodes) VALUES (?,?,?,?,?)',id,title,author||'',parseInt(wordsPerEpisode),eps.length);
-    for(const ep of eps) await db.run('INSERT INTO book_episodes (id,book_id,episode_number,title,content,word_count) VALUES (?,?,?,?,?,?)',uuid(),id,ep.n,ep.title,ep.content,ep.wordCount);
+
+    await db.run('INSERT INTO books (id,title,author,words_per_episode,total_episodes) VALUES (?,?,?,?,?)',
+      id,title,author||'',wpe,eps.length);
+
+    // Insert episodes in batches to avoid timeouts on large books
+    const BATCH=20;
+    for(let i=0;i<eps.length;i+=BATCH){
+      const batch=eps.slice(i,i+BATCH);
+      await Promise.all(batch.map(ep=>
+        db.run('INSERT INTO book_episodes (id,book_id,episode_number,title,content,word_count) VALUES (?,?,?,?,?,?)',
+          uuid(),id,ep.n,ep.title,ep.content,ep.wordCount)
+      ));
+    }
     res.json({bookId:id,title,totalEpisodes:eps.length});
-  }catch(e){res.status(500).json({error:e.message});}
+  }catch(e){
+    console.error('Book upload error:',e);
+    if(filePath) try{fs.unlinkSync(filePath);}catch{}
+    res.status(500).json({error:e.message||'Upload failed'});
+  }
 });
 
 app.post('/api/books/:id/cover', admin, coverUp.single('cover'), async (req,res) => {
@@ -382,5 +439,13 @@ app.get('/api/analytics', admin, async (req,res) => {
 app.get('/admin',    (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('/book/:id', (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('*',         (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
+
+// Global error handlers — server must never crash
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
 
 initDB().then(() => app.listen(PORT, () => console.log(`Pagebound on port ${PORT}`)));
