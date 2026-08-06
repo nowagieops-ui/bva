@@ -387,6 +387,7 @@ html,body{
 }
 .reader-body p{margin-bottom:1.4em}
 .reader-body em{font-style:italic}
+.reader-body p>em:only-child{font-style:normal} /* whole-para em = not italic, just bad markup */
 .reader-body strong{font-weight:700}
 .reader-body u{text-decoration:underline}
 .reader-body .rh{
@@ -1147,10 +1148,15 @@ function epState(i) {
   const done=bookProg.done_eps||[], cur=bookProg.current_ep||0;
   if(done.includes(i)) return 'done';
   if(i===cur) return 'cur';
-  const wEnd=cur+OPEN_WINDOW-1;
-  if(i>cur&&i<=wEnd) return isDayDone()?'lk':'available';
-  if(i>wEnd) return 'future';
-  return 'available';
+  // Window opens from the current episode — only OPEN_WINDOW-1 episodes ahead are unlocked
+  // e.g. cur=2, OPEN_WINDOW=3 → only ep 3 (index) is unlocked next, not 3 and 4
+  const nextUnlocked = cur + 1;
+  const windowEnd = cur + OPEN_WINDOW - 1; // cur counts as 1, so 2 more ahead
+  if(i > cur && i <= windowEnd) return isDayDone()?'lk':'available';
+  if(i > windowEnd) return 'future';
+  // Episodes before cur that aren't done — shouldn't happen but mark available
+  if(i < cur && !done.includes(i)) return 'available';
+  return 'future';
 }
 function renderStrip() {
   const strip=g('epStrip'); strip.innerHTML='';
@@ -1203,7 +1209,12 @@ function renderContent(raw) {
       const inner = t.replace(/【H】|【\/H】/g,'').trim();
       return '<p class="rh">'+fmtMarkers(inner)+'</p>';
     }
-    return '<p>'+fmtMarkers(t)+'</p>';
+    // If the entire paragraph is wrapped in italic, it's a font style not emphasis — strip it
+    let pt = t;
+    if(pt.startsWith('【I】') && pt.endsWith('【/I】')) {
+      pt = pt.slice(3, -4); // remove outer 【I】...【/I】
+    }
+    return '<p>'+fmtMarkers(pt)+'</p>';
   }).join('');
 }
 g('readerBody').innerHTML = renderContent(content);
@@ -1299,42 +1310,47 @@ async function showAd(afterFn) {
   afterAdFn=afterFn;
   let ad=null;
   try{const r=await fetch(`${API}/api/ads/random`);if(r.ok)ad=await r.json();}catch(e){}
-  g('adName').textContent=ad?ad.name:'Sponsor message';
+  console.log('Ad data:', ad);
+  g('adName').textContent=(ad&&ad.name&&ad.name.length>1)?ad.name:'Sponsor';
   g('adDesc').textContent=ad?ad.description||'':'Thank you for reading with Pagebound.';
   const wrap=g('adVideoWrap'),ph=g('adPlaceholder');
   wrap.querySelectorAll('video,img:not(#adPlaceholder img)').forEach(el=>el.remove());
   if(ad&&ad.url&&ad.type==='video'){
     ph.style.display='none';
     const vid=document.createElement('video');
-    vid.src=ad.url;
-    vid.muted=true; // start muted so autoplay works in all browsers
+    // Use absolute URL to ensure it works from /book/:id route
+    vid.src=(ad.url.startsWith('http')?ad.url:window.location.origin+ad.url);
+    vid.muted=true;
     vid.autoplay=true;
     vid.playsInline=true;
-    vid.controls=false;
+    vid.controls=true; // show controls so user can play manually if autoplay blocked
     vid.style.cssText='width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0;background:#000';
     wrap.insertBefore(vid,g('adCountdownOverlay'));
     vid.load();
-    // Try to unmute after play starts
     vid.addEventListener('playing',()=>{
-      try{ vid.muted=false; }catch(e){}
+      try{ vid.muted=false; vid.controls=false; }catch(e){}
     });
     vid.addEventListener('loadedmetadata',()=>{
       const dur=Math.ceil(vid.duration)||15;
-      vid.play().catch(()=>{}); // force play
+      vid.play().catch(()=>{
+        // Autoplay blocked — show controls, start countdown anyway
+        vid.controls=true;
+      });
       startAdCountdown(dur,()=>{vid.pause();vid.remove();ph.style.display='flex';finishAd();});
     });
     vid.addEventListener('ended',()=>{clearInterval(adTimer);vid.remove();ph.style.display='flex';finishAd();});
     vid.addEventListener('error',(e)=>{
-      console.warn('Ad video error:',e);
+      console.warn('Ad video error, code:',vid.error?.code,'message:',vid.error?.message);
       vid.remove();ph.style.display='flex';
-      startAdCountdown(10,finishAd); // still count down, just no video
+      startAdCountdown(10,finishAd);
     });
-    // Fallback if metadata never loads after 3s
+    // Fallback: if nothing loads in 4s, skip
     setTimeout(()=>{
       if(vid.readyState===0&&vid.parentNode){
-        vid.remove();ph.style.display='flex';startAdCountdown(10,finishAd);
+        console.warn('Ad video timeout - skipping');
+        vid.remove();ph.style.display='flex';startAdCountdown(5,finishAd);
       }
-    },3000);
+    },4000);
   } else if(ad&&ad.url){
     ph.style.display='none';
     const img=document.createElement('img');img.src=ad.url;
