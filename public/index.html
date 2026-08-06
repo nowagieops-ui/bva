@@ -500,6 +500,22 @@ html,body{
   font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;
   color:var(--blue);margin:14px 0 22px;letter-spacing:-1px;
 }
+/* ── Purchase/limit modal ── */
+#limitModal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:none;align-items:center;justify-content:center;padding:16px}
+#limitModal.show{display:flex}
+.limit-card{background:var(--bg);border-radius:var(--r);padding:32px 28px;max-width:420px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+.limit-card h2{font-family:var(--serif);font-size:22px;font-weight:400;margin-bottom:10px}
+.limit-card p{font-size:14px;color:var(--ink2);line-height:1.6;margin-bottom:0}
+.limit-tomorrow{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--blue);margin:16px 0 4px;letter-spacing:-1px}
+.limit-until{font-size:12px;color:var(--ink3);margin-bottom:20px}
+.limit-divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--ink3);font-size:12px}
+.limit-divider::before,.limit-divider::after{content:'';flex:1;height:.5px;background:var(--line)}
+.limit-unlock-btn{width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:var(--r-sm);font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px}
+.limit-unlock-btn:hover{background:#1d4ed8}
+.limit-unlock-btn:disabled{opacity:.6;cursor:not-allowed}
+.limit-unlock-desc{font-size:12px;color:var(--ink3);margin-bottom:18px}
+.limit-close{font-size:13px;color:var(--ink3);cursor:pointer;text-decoration:underline;background:none;border:none;padding:4px}
+.paid-banner{background:#f0fdf4;border:1px solid #86efac;border-radius:var(--r-sm);padding:10px 14px;font-size:13px;color:#16a34a;display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .earn-list{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
 .earn-row{
   display:flex;align-items:center;justify-content:space-between;
@@ -880,6 +896,24 @@ html,body{
   </div>
 </div>
 
+<!-- ══ LIMIT / PURCHASE MODAL ══════════════════════════════ -->
+<div id="limitModal">
+  <div class="limit-card">
+    <div style="font-size:28px;margin-bottom:8px">📖</div>
+    <h2>You've reached today's limit</h2>
+    <p>Come back tomorrow to continue — your next 3 episodes will be waiting.</p>
+    <div class="limit-tomorrow" id="limitCountdown">23:59:59</div>
+    <div class="limit-until">until your episodes reset</div>
+    <div class="limit-divider">or</div>
+    <button class="limit-unlock-btn" id="unlockBtn" onclick="startPurchase()">
+      <svg style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+      Unlock next 10,000 words — $0.99
+    </button>
+    <div class="limit-unlock-desc">One-time purchase &middot; No subscription &middot; Read right away</div>
+    <button class="limit-close" onclick="closeLimitModal()">No thanks, I'll wait</button>
+  </div>
+</div>
+
 <!-- ══ ADMIN ══════════════════════════════════════════════════ -->
 <div id="pageAdmin" style="display:none">
   <div class="admin-shell">
@@ -1087,6 +1121,8 @@ async function doEarn(action) {
   toast('Earned '+{ad:'+15 min',share:'+30 min · +1 ep',both:'+45 min · +2 eps'}[action]);
   updateStats();updateTimerChip();
   if(!isDayDone()){clearInterval(dayTimer);showReaderSection('reader');loadEpisode(bookProg.current_ep);startTick();}
+  // Check if user just returned from Stripe payment
+  checkPaidReturn();
 }
 
 // ── Progress ──────────────────────────────────────────────────
@@ -1288,6 +1324,86 @@ g('readerBody').innerHTML = renderContent(content);
   } catch(e){toast('Error loading episode');}
 }
 
+// ── Purchase / Limit Modal ─────────────────────────────────────
+let limitCountdownTimer = null;
+
+function showLimitModal() {
+  document.getElementById('limitModal').classList.add('show');
+  startLimitCountdown();
+}
+
+function closeLimitModal() {
+  document.getElementById('limitModal').classList.remove('show');
+  if (limitCountdownTimer) clearInterval(limitCountdownTimer);
+}
+
+function startLimitCountdown() {
+  if (limitCountdownTimer) clearInterval(limitCountdownTimer);
+  function tick() {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const diff = Math.max(0, Math.floor((tomorrow - now) / 1000));
+    const h = Math.floor(diff / 3600);
+    const m = Math.floor((diff % 3600) / 60);
+    const s = diff % 60;
+    const el = document.getElementById('limitCountdown');
+    if (el) el.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  }
+  tick();
+  limitCountdownTimer = setInterval(tick, 1000);
+}
+
+async function startPurchase() {
+  const btn = document.getElementById('unlockBtn');
+  btn.disabled = true;
+  btn.textContent = 'Redirecting to payment…';
+  try {
+    const res = await fetch('/api/purchase/checkout', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','x-session-id':sessionId},
+      body: JSON.stringify({ bookId: activeBook.id })
+    });
+    const data = await res.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      alert('Payment error: ' + (data.error || 'Unknown error'));
+      btn.disabled = false;
+      btn.innerHTML = '<svg style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg> Unlock next 10,000 words — $0.99';
+    }
+  } catch(e) {
+    alert('Could not connect to payment. Please try again.');
+    btn.disabled = false;
+  }
+}
+
+// Check URL params on load — Stripe redirects back with ?paid=1&cs=xxx
+async function checkPaidReturn() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('paid') === '1') {
+    const csId = params.get('cs');
+    // Clean URL
+    window.history.replaceState({}, '', window.location.pathname);
+    // Show banner — unlock is confirmed via webhook, just show the confirmation
+    showPaidBanner();
+  }
+}
+
+function showPaidBanner() {
+  const existing = document.getElementById('paidBanner');
+  if (existing) return;
+  const banner = document.createElement('div');
+  banner.id = 'paidBanner';
+  banner.className = 'paid-banner';
+  banner.innerHTML = '<svg style="width:16px;height:16px;flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Unlocked! You can now read the next 10,000 words — no timer.';
+  const wrap = document.getElementById('readerWrap');
+  if (wrap) wrap.insertBefore(banner, wrap.firstChild);
+  // Auto-hide after 8s
+  setTimeout(() => banner.remove(), 8000);
+}
+
 async function readerNext() {
   const next = (bookProg.current_ep || 0) + 1;
   if (next >= activeBook.episodes.length) return;
@@ -1296,10 +1412,26 @@ async function readerNext() {
 
   // Check if next ep is within today's window
   if (next > win.end) {
-    // Beyond today's window — day done for this book
-    renderStrip(); updateStats(); updateTimerChip();
-    showReaderSection('daydone'); startDayTimer();
-    return;
+    // Check if there's an active paid unlock
+    const unlockStatus = await fetch('/api/purchase/status/'+activeBook.id,{headers:{'x-session-id':sessionId}}).then(r=>r.json()).catch(()=>({active:false}));
+    if (unlockStatus.active) {
+      // Paid unlock active — allow reading, consume words from this episode
+      const epData = activeBook.episodes[next-1];
+      const wc = epData?.word_count || 500;
+      const consume = await fetch('/api/purchase/consume',{method:'POST',headers:{'Content-Type':'application/json','x-session-id':sessionId},body:JSON.stringify({bookId:activeBook.id,wordsRead:wc})}).then(r=>r.json()).catch(()=>({active:false}));
+      if (!consume.active) {
+        // Paid block exhausted — show normal day done with timer
+        renderStrip(); updateStats(); updateTimerChip();
+        showReaderSection('daydone'); startDayTimer();
+        return;
+      }
+      // Continue into the paid episode — fall through below
+    } else {
+      // No paid unlock — show limit modal
+      renderStrip(); updateStats(); updateTimerChip();
+      showLimitModal();
+      return;
+    }
   }
 
   // Save progress — move current forward
@@ -1367,7 +1499,13 @@ function startTick() {
         return;
       }
     }
-    if(isDayDone()){clearInterval(tickTimer);showReaderSection('daydone');startDayTimer();renderStrip();}
+    if(isDayDone()){clearInterval(tickTimer);renderStrip();
+      // Check paid unlock before showing day-done vs limit modal
+      fetch('/api/purchase/status/'+(activeBook?.id||'x'),{headers:{'x-session-id':sessionId}}).then(r=>r.json()).then(s=>{
+        if(s.active){/* still has paid words, keep reading */}
+        else{showReaderSection('daydone');startDayTimer();}
+      }).catch(()=>{showReaderSection('daydone');startDayTimer();});
+    }
   },10000);
 }
 
