@@ -236,11 +236,13 @@ app.post('/api/daily/episode-done', async (req,res) => {
   res.json({ok:true});
 });
 
+const MAX_BONUS_EPS = 2; // caps the daily episode total at 3 base + 2 earned = 5
 app.post('/api/daily/earn', async (req,res) => {
   const sid=req.headers['x-session-id'],{action}=req.body;
   const te={ad:900,share:1800,both:2700},ee={ad:0,share:1,both:2};
   const s=await getOrCreateDaily(sid);
-  await db.run('UPDATE daily_state SET bonus_secs=?,bonus_eps=? WHERE session_id=? AND date=?',(s.bonus_secs||0)+(te[action]||0),(s.bonus_eps||0)+(ee[action]||0),sid,today());
+  const newBonusEps=Math.min((s.bonus_eps||0)+(ee[action]||0), MAX_BONUS_EPS);
+  await db.run('UPDATE daily_state SET bonus_secs=?,bonus_eps=? WHERE session_id=? AND date=?',(s.bonus_secs||0)+(te[action]||0),newBonusEps,sid,today());
   res.json({ok:true});
 });
 

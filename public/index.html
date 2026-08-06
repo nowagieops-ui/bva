@@ -929,27 +929,66 @@ html,body{
     </div>
     <div class="limit-tomorrow" id="limitCountdown">23:59:59</div>
     <div class="limit-until">until your next episodes unlock</div>
-    <div class="limit-divider">or keep reading now</div>
-    <div class="earn-list">
-      <div class="earn-row">
-        <div class="earn-info"><div class="earn-icon" style="background:var(--blue-l)">📺</div><div class="earn-text"><strong>Watch an ad</strong><span>+15 minutes reading time</span></div></div>
-        <button class="earn-btn blue" onclick="doEarn('ad')">Watch</button>
-      </div>
-      <div class="earn-row">
-        <div class="earn-info"><div class="earn-icon" style="background:var(--bg)">🔗</div><div class="earn-text"><strong>Share this book</strong><span>+30 min &middot; +1 episode</span></div></div>
-        <button class="earn-btn def" onclick="doEarn('share')">Share</button>
-      </div>
-      <div class="earn-row">
-        <div class="earn-info"><div class="earn-icon" style="background:var(--green-l)">⚡</div><div class="earn-text"><strong>Watch and share</strong><span>+45 min &middot; +2 episodes</span></div></div>
-        <button class="earn-btn green" onclick="doEarn('both')">Do both</button>
+
+    <!-- Swapped in while an earned ad is actually playing -->
+    <div id="earnAdPlayer" style="display:none">
+      <div class="ad-wrap" style="margin:14px 0">
+        <div class="ad-video-zone" id="earnAdVideoWrap">
+          <div class="ad-ph" id="earnAdPlaceholder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="earnAdPlaceholderName">Sponsor message</span>
+          </div>
+          <div class="ad-countdown-pill" id="earnAdCountdownOverlay">
+            <svg class="ad-countdown-ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="2"/><circle id="earnAdRingSmall" cx="8" cy="8" r="6" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="37.7" stroke-dashoffset="0" stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .5s linear"/></svg>
+            <span id="earnAdCountNum">—</span>s
+          </div>
+        </div>
+        <div class="ad-bottom-bar">
+          <div class="ad-bottom-label"><span class="ad-tag">AD</span><span class="ad-bottom-name" id="earnAdName">—</span></div>
+          <span class="ad-bottom-context">Watch to earn time</span>
+        </div>
       </div>
     </div>
-    <button class="limit-unlock-btn btn3d gold" id="unlockBtn" onclick="startPurchase()">
-      <svg style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
-      Unlock next 10,000 words — $0.99
-    </button>
-    <div class="limit-unlock-desc">One-time purchase &middot; No subscription &middot; Read right away</div>
-    <button class="limit-close" onclick="closeLimitModal()">No thanks, I'll wait</button>
+
+    <!-- Swapped in while composing the share-with-a-friend email -->
+    <div id="earnSharePanel" style="display:none">
+      <div class="limit-divider">share with a friend</div>
+      <div style="text-align:left">
+        <label class="add-label">Your name</label>
+        <input class="field" id="shareYourName" placeholder="e.g. Alex" oninput="refreshShareMessage()">
+        <label class="add-label">Friend's email</label>
+        <input class="field" id="shareFriendEmail" type="email" placeholder="friend@email.com">
+        <label class="add-label">Message</label>
+        <textarea class="field" id="shareMessage" rows="5" style="resize:vertical;font-family:var(--sans)"></textarea>
+      </div>
+      <button class="big-btn" style="margin-bottom:8px" onclick="sendShare()">Send &amp; earn reward</button>
+      <button class="limit-close" onclick="cancelShare()">Cancel</button>
+    </div>
+
+    <div id="limitEarnContent">
+      <div class="limit-divider">or keep reading now</div>
+      <div class="earn-list">
+        <div class="earn-row">
+          <div class="earn-info"><div class="earn-icon" style="background:var(--blue-l)">📺</div><div class="earn-text"><strong>Watch an ad</strong><span>+15 minutes reading time</span></div></div>
+          <button class="earn-btn blue" id="earnBtnAd" onclick="handleEarnClick('ad',this)">Watch</button>
+        </div>
+        <div class="earn-row" id="earnRowShare">
+          <div class="earn-info"><div class="earn-icon" style="background:var(--bg)">🔗</div><div class="earn-text"><strong>Share this book</strong><span>+30 min &middot; +1 episode</span></div></div>
+          <button class="earn-btn def" id="earnBtnShare" onclick="handleEarnClick('share',this)">Share</button>
+        </div>
+        <div class="earn-row" id="earnRowBoth">
+          <div class="earn-info"><div class="earn-icon" style="background:var(--green-l)">⚡</div><div class="earn-text"><strong>Watch and share</strong><span>+45 min &middot; +2 episodes</span></div></div>
+          <button class="earn-btn green" id="earnBtnBoth" onclick="handleEarnClick('both',this)">Do both</button>
+        </div>
+      </div>
+      <p id="earnEpCapNote" style="display:none;font-size:11px;font-weight:700;color:var(--ink3);margin:-8px 0 16px">You've reached today's 5-episode max via bonuses — watch an ad for more reading time.</p>
+      <button class="limit-unlock-btn btn3d gold" id="unlockBtn" onclick="startPurchase()">
+        <svg style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+        Unlock next 10,000 words — $0.99
+      </button>
+      <div class="limit-unlock-desc">One-time purchase &middot; No subscription &middot; Read right away</div>
+      <button class="limit-close" onclick="closeLimitModal()">No thanks, I'll wait</button>
+    </div>
   </div>
 </div>
 
@@ -1075,6 +1114,7 @@ const API = '';
 const DAILY_LIMIT = 3600;
 const EP_MAX = 3;
 const EPISODES_PER_DAY = 3; // episodes unlocked each new day
+const MAX_BONUS_EPS = 2; // matches server — caps the day at 3 base + 2 earned = 5
 const AD_TRIGGERS = [600, 1800, 3600];
 
 // ── State ─────────────────────────────────────────────────────
@@ -1187,6 +1227,128 @@ async function doEarn(action) {
   checkPaidReturn();
 }
 
+// ── Earn actions actually DO something before granting the reward ──────
+// Watch = plays a real ad from the uploaded ad library, same mechanics as
+// the between-episode ad break. Share = opens the native share sheet (or
+// copies the book link as a fallback) — reward only lands after either one
+// genuinely completes, not the instant the button is clicked.
+let earnAdTimer = null;
+function earnAdCountdown(dur, onDone) {
+  clearInterval(earnAdTimer); let secs = dur;
+  const ring = g('earnAdRingSmall'), count = g('earnAdCountNum'), circ = 37.7;
+  const upd = () => { ring.style.strokeDashoffset = circ*(1-secs/dur); count.textContent = secs; };
+  upd();
+  earnAdTimer = setInterval(() => { secs--; upd(); if (secs<=0) { clearInterval(earnAdTimer); onDone(); } }, 1000);
+}
+
+function playEarnAd() {
+  return new Promise(async (resolve) => {
+    const wrap = g('earnAdVideoWrap'), ph = g('earnAdPlaceholder');
+    let ad = null;
+    try { const r = await fetch(`${API}/api/ads/random`); if (r.ok) ad = await r.json(); } catch(e){}
+    g('earnAdName').textContent = (ad && ad.name && ad.name.length>1) ? ad.name : 'Sponsor';
+    wrap.querySelectorAll('video,img:not(#earnAdPlaceholder img)').forEach(el=>el.remove());
+    if (ad && ad.url && ad.type === 'video') {
+      ph.style.display = 'none';
+      const vid = document.createElement('video');
+      vid.src = ad.url.startsWith('http') ? ad.url : window.location.origin+ad.url;
+      vid.muted = true; vid.autoplay = true; vid.playsInline = true; vid.controls = true;
+      vid.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0;background:#000';
+      wrap.insertBefore(vid, g('earnAdCountdownOverlay'));
+      vid.load();
+      vid.addEventListener('playing', () => { try { vid.muted=false; vid.controls=false; } catch(e){} });
+      vid.addEventListener('loadedmetadata', () => {
+        const dur = Math.ceil(vid.duration) || 15;
+        vid.play().catch(() => { vid.controls = true; });
+        earnAdCountdown(dur, () => { vid.pause(); vid.remove(); ph.style.display='flex'; resolve(); });
+      });
+      vid.addEventListener('ended', () => { clearInterval(earnAdTimer); vid.remove(); ph.style.display='flex'; resolve(); });
+      vid.addEventListener('error', () => { vid.remove(); ph.style.display='flex'; earnAdCountdown(10, resolve); });
+      setTimeout(() => {
+        if (vid.readyState===0 && vid.parentNode) { vid.remove(); ph.style.display='flex'; earnAdCountdown(5, resolve); }
+      }, 4000);
+    } else if (ad && ad.url) {
+      ph.style.display = 'none';
+      const img = document.createElement('img'); img.src = ad.url;
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0';
+      wrap.insertBefore(img, g('earnAdCountdownOverlay'));
+      earnAdCountdown(15, () => { img.remove(); ph.style.display='flex'; resolve(); });
+    } else {
+      g('earnAdPlaceholderName').textContent = ad ? ad.name : 'Sponsor message';
+      ph.style.display = 'flex';
+      earnAdCountdown(10, resolve);
+    }
+  });
+}
+
+// Returns true once the share genuinely happened (share sheet completed, or
+// the link got copied) — false if the user backed out.
+// Share = compose an actual email to a friend (name + their address +
+// an editable template mentioning the book), sent via mailto:. The reward
+// only lands once they hit Send, not the instant they click "Share".
+function shareTemplate(name) {
+  const title = activeBook ? activeBook.title : 'this book';
+  const url = activeBook ? window.location.origin+'/book/'+activeBook.id : window.location.origin;
+  const signoff = name ? '\n\n— '+name : '';
+  return `Hi! I'm reading "${title}" on Pagebound and thought you'd like it too.\n\nCheck it out: ${url}${signoff}`;
+}
+function refreshShareMessage() {
+  g('shareMessage').value = shareTemplate(g('shareYourName').value.trim());
+}
+let shareResolve = null;
+function openSharePanel() {
+  g('shareYourName').value = '';
+  g('shareFriendEmail').value = '';
+  refreshShareMessage();
+  g('limitEarnContent').style.display = 'none';
+  g('earnSharePanel').style.display = 'block';
+  return new Promise(resolve => { shareResolve = resolve; });
+}
+function closeSharePanel() {
+  g('earnSharePanel').style.display = 'none';
+  g('limitEarnContent').style.display = 'block';
+}
+function sendShare() {
+  const email = g('shareFriendEmail').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Enter a valid email for your friend'); return; }
+  const title = activeBook ? activeBook.title : 'Pagebound';
+  const body = g('shareMessage').value || shareTemplate(g('shareYourName').value.trim());
+  const mailto = 'mailto:'+encodeURIComponent(email)+'?subject='+encodeURIComponent('Thought you\'d like "'+title+'"')+'&body='+encodeURIComponent(body);
+  window.location.href = mailto;
+  closeSharePanel();
+  if (shareResolve) { shareResolve(true); shareResolve = null; }
+}
+function cancelShare() {
+  closeSharePanel();
+  if (shareResolve) { shareResolve(false); shareResolve = null; }
+}
+
+async function handleEarnClick(action, btnEl) {
+  document.querySelectorAll('.earn-btn').forEach(b => b.disabled = true);
+  try {
+    let watchedAd = false;
+    if (action === 'ad' || action === 'both') {
+      g('limitEarnContent').style.display = 'none';
+      g('earnAdPlayer').style.display = 'block';
+      await playEarnAd();
+      g('earnAdPlayer').style.display = 'none';
+      g('limitEarnContent').style.display = 'block';
+      watchedAd = true;
+    }
+    if (action === 'share' || action === 'both') {
+      const shared = await openSharePanel();
+      if (!shared) {
+        if (watchedAd) { toast('Share skipped — still earned your ad reward'); await doEarn('ad'); }
+        else toast('Share cancelled — no reward given');
+        return;
+      }
+    }
+    await doEarn(action);
+  } finally {
+    document.querySelectorAll('.earn-btn').forEach(b => b.disabled = false);
+  }
+}
+
 // ── Progress ──────────────────────────────────────────────────
 async function loadProgress(id) {
   try { const r=await fetch(`${API}/api/progress/${id}`,{headers:aH()}); return r.ok?await r.json():{current_ep:0,done_eps:[]}; } catch(e){return{current_ep:0,done_eps:[]};}
@@ -1274,20 +1436,39 @@ async function openBook(id) {
 
 // ── Episode strip ─────────────────────────────────────────────
 function getDailyWindow(bookId) {
-  // Each day, 3 episodes unlock from where the reader stopped. Only the
-  // starting point is cached per book per day — the end is recomputed from
-  // the live bonus_eps every call, so episodes earned via share/watch-ad
-  // actually extend today's window instead of being silently ignored.
+  // Each day, 3 (+ earned bonus) episodes unlock from where the reader
+  // stopped. The starting point is cached per book per day; the end is
+  // recomputed from the live bonus_eps every call so episodes earned via
+  // share/watch-ad actually extend today's window.
   const key = 'pb_window_' + bookId + '_' + todayKeyLS();
   const saved = localStorage.getItem(key);
   let start;
   if (saved) {
     start = JSON.parse(saved).start;
   } else {
-    start = bookProg.current_ep || 0;
-    localStorage.setItem(key, JSON.stringify({ start }));
+    // First time today — the boundary episode the reader got capped on
+    // yesterday was already part of yesterday's allotment, so today's
+    // fresh batch must start *after* yesterday's window, not re-include
+    // it. Otherwise the reader loses a full episode's worth of new content
+    // every day. Scan localStorage for the most recent prior window.
+    let prevEnd = -1;
+    const prefix = 'pb_window_' + bookId + '_';
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix) && k !== key) {
+        try {
+          const w = JSON.parse(localStorage.getItem(k));
+          if (typeof w.end === 'number' && w.end > prevEnd) prevEnd = w.end;
+        } catch(e){}
+      }
+    }
+    start = prevEnd >= 0 ? Math.max(bookProg.current_ep || 0, prevEnd + 1) : (bookProg.current_ep || 0);
   }
-  return { start, end: start + EPISODES_PER_DAY - 1 + (daily?.bonus_eps || 0) };
+  const end = start + EPISODES_PER_DAY - 1 + (daily?.bonus_eps || 0);
+  // Re-save with the freshest end every call, so by the time the day rolls
+  // over, tomorrow's lookup sees any bonus episodes earned today too.
+  localStorage.setItem(key, JSON.stringify({ start, end }));
+  return { start, end };
 }
 
 function todayKeyLS() {
@@ -1438,6 +1619,12 @@ function showLimitModal() {
 function closeLimitModal() {
   g('limitModal').classList.remove('show');
   if (limitCountdownTimer) clearInterval(limitCountdownTimer);
+  if (earnAdTimer) clearInterval(earnAdTimer);
+  g('earnAdPlayer').style.display = 'none';
+  g('earnSharePanel').style.display = 'none';
+  g('limitEarnContent').style.display = 'block';
+  document.querySelectorAll('.earn-btn').forEach(b => b.disabled = false);
+  if (shareResolve) { shareResolve(false); shareResolve = null; }
 }
 
 // The single entry point for "you're capped for today" — fills in today's
@@ -1445,11 +1632,25 @@ function closeLimitModal() {
 // reason: 'time' | 'episodes' | undefined (best-effort guess if omitted —
 // used only when re-showing after an earn action, where the previous
 // messaging is still a reasonable guess)
+// Share/both grant bonus episodes, but the day still caps at 3 base + 2
+// earned = 5 total — once that's used up, only the ad's bonus *time* still
+// does anything, so grey those rows out instead of letting them look like
+// they'll unlock more episodes that never come.
+function updateEarnAvailability() {
+  const epCapped = (daily?.bonus_eps || 0) >= MAX_BONUS_EPS;
+  g('earnBtnShare').disabled = epCapped;
+  g('earnBtnBoth').disabled = epCapped;
+  g('earnRowShare').style.opacity = epCapped ? '.5' : '1';
+  g('earnRowBoth').style.opacity = epCapped ? '.5' : '1';
+  g('earnEpCapNote').style.display = epCapped ? 'block' : 'none';
+}
+
 function showDayCompleteModal(reason) {
   const eps = daily?.eps_today || 0;
   const mins = Math.floor((daily?.secs_watched || 0) / 60);
   g('limitStatEps').textContent = eps;
   g('limitStatMins').textContent = mins;
+  updateEarnAvailability();
   const isTime = reason ? reason === 'time' : (isTimeDone() && !isEpDone());
   if (!isTime) {
     g('limitBadge').textContent = '🎉';
