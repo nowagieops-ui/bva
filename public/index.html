@@ -290,6 +290,20 @@ html,body{
 .ep-strip-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px}
 .ep-strip{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
 .ep-strip::-webkit-scrollbar{display:none}
+.ep-legend-row{display:flex;gap:14px;margin-top:10px;padding-top:10px;border-top:.5px solid var(--line);flex-wrap:wrap}
+.ep-leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);font-weight:500}
+.ep-leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.ep-leg-dot.done{background:var(--green-l);border:1px solid var(--green-b)}
+.ep-leg-dot.cur{background:var(--blue);border:1px solid var(--blue)}
+.ep-leg-dot.available{background:var(--blue-l);border:1.5px solid var(--blue)}
+.ep-leg-dot.future{background:var(--line);border:1px solid var(--line2)}
+.ep-legend-row{display:flex;gap:14px;margin-top:10px;padding-top:10px;border-top:.5px solid var(--line)}
+.ep-leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);font-weight:500}
+.ep-leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.ep-leg-dot.done{background:var(--green-l);border:1px solid var(--green-b)}
+.ep-leg-dot.cur{background:var(--blue);border:1px solid var(--blue)}
+.ep-leg-dot.available{background:var(--blue-l);border:1px solid var(--blue-b)}
+.ep-leg-dot.future{background:var(--line);border:1px solid var(--line2);opacity:.5}
 .ep-pill{
   flex-shrink:0;width:34px;height:34px;border-radius:var(--r-sm);
   border:1px solid var(--line2);background:var(--bg);
@@ -298,11 +312,17 @@ html,body{
   color:var(--ink3);transition:all .12s;position:relative;flex-direction:column;gap:1px;
 }
 .ep-pill:hover:not(.lk):not(.future){border-color:var(--blue);color:var(--blue);background:var(--blue-l)}
+/* Done — green check */
 .ep-pill.done{background:var(--green-l);border-color:var(--green-b);color:var(--green)}
 .ep-pill.done svg{width:12px;height:12px}
-.ep-pill.cur{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
-.ep-pill.lk{opacity:.45;cursor:default}
-.ep-pill.future{opacity:.15;cursor:not-allowed;pointer-events:none}
+/* Current — solid blue */
+.ep-pill.cur{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700}
+/* Available today — blue outline */
+.ep-pill.available{background:var(--blue-l);border-color:var(--blue);color:var(--blue);font-weight:600}
+/* Locked by timer — greyed, timer icon */
+.ep-pill.lk{background:var(--bg);border-color:var(--line);color:var(--ink3);opacity:.5;cursor:not-allowed}
+/* Future — very faint, not clickable */
+.ep-pill.future{background:transparent;border-color:var(--line);color:var(--ink3);opacity:.2;cursor:not-allowed;pointer-events:none}
 
 /* STATS BAR */
 .stats-row{
@@ -752,6 +772,12 @@ html,body{
     <div class="ep-strip-wrap">
       <div class="ep-strip-label">Episodes</div>
       <div class="ep-strip" id="epStrip"></div>
+      <div class="ep-legend-row">
+        <div class="ep-leg"><div class="ep-leg-dot done"></div>Done</div>
+        <div class="ep-leg"><div class="ep-leg-dot cur"></div>Reading</div>
+        <div class="ep-leg"><div class="ep-leg-dot available"></div>Today</div>
+        <div class="ep-leg"><div class="ep-leg-dot future"></div>Locked</div>
+      </div>
     </div>
 
     <div class="stats-row">
@@ -1185,10 +1211,23 @@ function renderStrip() {
     const st=epState(i), pill=document.createElement('div');
     pill.className='ep-pill '+st;
     pill.title=st==='future'?'Finish earlier episodes first':st==='lk'?'Daily limit reached':ep.title;
-    if(st==='done')pill.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
-    else if(st==='lk')pill.innerHTML='<span>'+ep.episode_number+'</span><svg style="width:9px;height:9px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
-    else if(st==='future')pill.innerHTML='<svg style="width:11px;height:11px;opacity:.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
-    else pill.innerHTML='<span>'+ep.episode_number+'</span>';
+    if(st==='done') {
+      // Green check — read
+      pill.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+    } else if(st==='cur') {
+      // Blue — currently reading
+      pill.innerHTML='<span>'+ep.episode_number+'</span>';
+    } else if(st==='available') {
+      // Today's unlocked episodes — show number clearly
+      pill.innerHTML='<span>'+ep.episode_number+'</span>';
+    } else if(st==='lk') {
+      // Locked by timer — show number + small lock
+      pill.innerHTML='<span>'+ep.episode_number+'</span>';
+      pill.title='Come back tomorrow';
+    } else {
+      // Future — not yet available, just show number dimmed
+      pill.innerHTML='<span>'+ep.episode_number+'</span>';
+    }
     if(st==='cur'||st==='done'||st==='available') pill.onclick=()=>jumpEp(i);
     else pill.style.pointerEvents='none';
     strip.appendChild(pill);
