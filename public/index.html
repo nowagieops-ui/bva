@@ -783,12 +783,12 @@ html,body{
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-label">Reading time today</div>
-        <div class="stat-val" id="statTime">0 / 60 min</div>
+        <div class="stat-val" id="statTime">0 / 30 min</div>
         <div class="stat-bar"><div class="stat-fill t" id="statTimeFill" style="width:0%"></div></div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Episodes today</div>
-        <div class="stat-val" id="statEps">0 / 6</div>
+        <div class="stat-val" id="statEps">0 / 3</div>
         <div class="stat-bar"><div class="stat-fill e" id="statEpsFill" style="width:0%"></div></div>
       </div>
     </div>
@@ -796,7 +796,7 @@ html,body{
     <div class="ad-schedule">
       <div class="ad-schedule-head">
         <div class="ad-schedule-label">Ad breaks</div>
-        <div class="ad-schedule-time" id="adBarTime">0 / 60 min</div>
+        <div class="ad-schedule-time" id="adBarTime">0 / 30 min</div>
       </div>
       <div class="ad-rail-wrap">
         <div class="ad-rail"><div class="ad-fill" id="sessionFill" style="width:0%"></div></div>
@@ -1000,7 +1000,7 @@ html,body{
 // ── Config ────────────────────────────────────────────────────
 const API = '';
 const DAILY_LIMIT = 3600;
-const EP_MAX = 6;
+const EP_MAX = 3;
 const EPISODES_PER_DAY = 3; // episodes unlocked each new day
 const AD_TRIGGERS = [600, 1800, 3600];
 
@@ -1373,7 +1373,7 @@ function startTick() {
 
 // ── Day done ──────────────────────────────────────────────────
 function startDayTimer(){
-  if(isEpDone()&&!isTimeDone()){g('dayDoneTitle').textContent="You've read 6 episodes today!";g('dayDoneDesc').textContent="Come back tomorrow or earn extra episodes now.";}
+  if(isEpDone()&&!isTimeDone()){g('dayDoneTitle').textContent="You've read 3 episodes today!";g('dayDoneDesc').textContent="Come back tomorrow or earn extra episodes now.";}
   else{g('dayDoneTitle').textContent="That's your hour for today!";g('dayDoneDesc').textContent="Your timer resets automatically tomorrow, or earn more now.";}
   clearInterval(dayTimer);updateDayDoneTimer();
   dayTimer=setInterval(async()=>{
