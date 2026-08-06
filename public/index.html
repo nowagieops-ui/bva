@@ -1193,13 +1193,10 @@ function fmtMarkers(t) {
     .replace(/【B】/g,'<strong>').replace(/【\/B】/g,'</strong>')
     .replace(/【I】/g,'<em>').replace(/【\/I】/g,'</em>')
     .replace(/【U】/g,'<u>').replace(/【\/U】/g,'</u>')
-    .replace(/
-/g,'<br>');
+    .replace(/\n/g,'<br>');
 }
 function renderContent(raw) {
-  return raw.split(/
-
-+/).filter(p=>p.trim()).map(para=>{
+  return raw.split(/\n\n+/).filter(p=>p.trim()).map(para=>{
     const t = para.trim();
     if(!t) return '';
     if(t.startsWith('【H】')) {
