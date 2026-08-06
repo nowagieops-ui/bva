@@ -204,7 +204,7 @@ app.get('/api/daily', async (req,res) => {
   const sid = req.headers['x-session-id'];
   if (!sid) return res.status(400).json({error:'No session'});
   const s = await getOrCreateDaily(sid);
-  res.json({...s, ads_hit:JSON.parse(s.ads_hit||'[]'), effectiveTimeLimit:3600+(s.bonus_secs||0), effectiveEpLimit:6+(s.bonus_eps||0)});
+  res.json({...s, ads_hit:JSON.parse(s.ads_hit||'[]'), effectiveTimeLimit:3600+(s.bonus_secs||0), effectiveEpLimit:3+(s.bonus_eps||0)});
 });
 
 app.post('/api/daily/tick', async (req,res) => {

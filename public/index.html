@@ -6,19 +6,24 @@
 <title>Pagebound</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 
 <style>
-/* Screenshot prevention */
+/* Screenshot / copy deterrents. Note: no browser exposes an event for OS-level
+   screenshots (Cmd+Shift+3/4/5 on Mac, Win+Shift+S on Windows) — this is a
+   best-effort layer (block easy copy/print/devtools-save paths, blur on
+   focus loss, watermark for traceability), not a hard technical block. */
 .reader-body, .reader-wrap {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
 }
+.reader-body img, .reader-body { -webkit-user-drag: none; }
 
 /* CSS screenshot deterrent — overlays on print/screenshot */
 @media print {
@@ -35,31 +40,50 @@
 /* Force overlay visible on screenshot attempt via CSS */
 #ssOverlay { -webkit-user-select:none; user-select:none; }
 .reader-body, .reader-wrap { -webkit-user-select:none; user-select:none; }
+
+/* Traceable watermark tiled over reader text — deters redistribution since
+   any screenshot carries the session id + timestamp. */
+.reader-body{position:relative}
+#readerWatermark{
+  position:absolute;inset:0;pointer-events:none;z-index:1;
+  overflow:hidden;opacity:.05;
+  display:flex;flex-wrap:wrap;align-content:flex-start;gap:40px;
+  transform:rotate(-18deg) scale(1.3);
+  transform-origin:center;
+}
+#readerWatermark span{font-size:12px;font-weight:800;white-space:nowrap;color:#000}
 </style>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --sans:'Inter',system-ui,sans-serif;
-  --serif:'Fraunces',Georgia,serif;
-  --ink:#111110;
-  --ink2:#6b6760;
-  --ink3:#a8a49e;
-  --bg:#faf9f7;
+  --sans:'Nunito',system-ui,sans-serif;
+  --serif:'Baloo 2','Nunito',system-ui,sans-serif;
+  --ink:#3c3c3c;
+  --ink2:#6b6b6b;
+  --ink3:#afafaf;
+  --bg:#fdfdfb;
   --card:#ffffff;
-  --line:rgba(0,0,0,.08);
-  --line2:rgba(0,0,0,.15);
-  --blue:#2563eb;
-  --blue-l:#eff6ff;
-  --blue-b:#93c5fd;
-  --green:#16a34a;
-  --green-l:#f0fdf4;
-  --green-b:#86efac;
-  --amber:#b45309;
-  --amber-l:#fffbeb;
-  --red:#dc2626;
-  --red-l:#fef2f2;
-  --r:12px;
-  --r-sm:8px;
+  --line:#e5e5e5;
+  --line2:#d5d5d5;
+  --blue:#1cb0f6;
+  --blue-l:#e5f6ff;
+  --blue-b:#84d8ff;
+  --blue-dark:#1899d6;
+  --green:#58cc02;
+  --green-l:#e9f9d9;
+  --green-b:#b3ea6f;
+  --green-dark:#4caf00;
+  --gold:#ffc800;
+  --gold-l:#fff6d9;
+  --gold-b:#ffe38a;
+  --gold-dark:#e6b400;
+  --amber:#ff9600;
+  --amber-l:#fff3e0;
+  --red:#ff4b4b;
+  --red-l:#ffeaea;
+  --red-dark:#ea2b2b;
+  --r:18px;
+  --r-sm:12px;
 }
 html,body{
   font-family:var(--sans);
@@ -69,7 +93,25 @@ html,body{
   -webkit-font-smoothing:antialiased;
   overflow-x:hidden;
   max-width:100vw;
+  font-weight:600;
 }
+
+/* ── 3D chunky button (Duolingo-style press effect) ── */
+.btn3d{
+  border:none;cursor:pointer;font-family:var(--sans);font-weight:800;
+  border-radius:16px;transition:transform .08s ease,box-shadow .08s ease;
+  transform:translateY(0);
+}
+.btn3d:active:not(:disabled){transform:translateY(3px)}
+.btn3d:disabled{cursor:not-allowed;opacity:.5}
+.btn3d.green{background:var(--green);color:#fff;box-shadow:0 4px 0 var(--green-dark)}
+.btn3d.green:active:not(:disabled){box-shadow:0 1px 0 var(--green-dark)}
+.btn3d.blue{background:var(--blue);color:#fff;box-shadow:0 4px 0 var(--blue-dark)}
+.btn3d.blue:active:not(:disabled){box-shadow:0 1px 0 var(--blue-dark)}
+.btn3d.gold{background:var(--gold);color:#5c4600;box-shadow:0 4px 0 var(--gold-dark)}
+.btn3d.gold:active:not(:disabled){box-shadow:0 1px 0 var(--gold-dark)}
+.btn3d.white{background:#fff;color:var(--ink2);box-shadow:0 4px 0 var(--line2);border:2px solid var(--line)}
+.btn3d.white:active:not(:disabled){box-shadow:0 1px 0 var(--line2)}
 
 /* ── FULL WIDTH LAYOUT ── */
 .app{
@@ -91,95 +133,98 @@ html,body{
 /* EMPTY HERO */
 .hero{
   width:100%;
-  padding:80px 0 64px;
+  padding:72px 0 64px;
   text-align:center;
-  background:linear-gradient(180deg,#ffffff 0%,var(--bg) 100%);
-  border-bottom:1px solid var(--line);
+  background:
+    radial-gradient(circle at 12% 15%, var(--gold-l) 0%, transparent 38%),
+    radial-gradient(circle at 88% 20%, var(--blue-l) 0%, transparent 40%),
+    linear-gradient(180deg,#ffffff 0%,var(--bg) 100%);
+  border-bottom:2px solid var(--line);
   margin-bottom:0;
 }
 .hero-kicker{
   display:inline-flex;
   align-items:center;
   gap:6px;
-  font-size:11px;
-  font-weight:600;
-  letter-spacing:.1em;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.06em;
   text-transform:uppercase;
-  color:var(--blue);
-  background:var(--blue-l);
-  border:1px solid var(--blue-b);
+  color:#fff;
+  background:var(--green);
   border-radius:100px;
-  padding:5px 14px;
-  margin-bottom:24px;
+  padding:6px 16px;
+  margin-bottom:22px;
+  box-shadow:0 3px 0 var(--green-dark);
 }
 .hero h1{
   font-family:var(--serif);
-  font-size:clamp(36px,6vw,60px);
-  font-weight:300;
-  line-height:1.1;
+  font-size:clamp(34px,6vw,56px);
+  font-weight:800;
+  line-height:1.12;
   color:var(--ink);
-  margin-bottom:20px;
-  letter-spacing:-1px;
+  margin-bottom:18px;
+  letter-spacing:-.5px;
 }
-.hero h1 em{font-style:italic;color:var(--blue);}
+.hero h1 em{font-style:normal;color:var(--green);}
 .hero-sub{
   font-size:clamp(15px,2vw,18px);
+  font-weight:700;
   color:var(--ink2);
-  line-height:1.75;
+  line-height:1.6;
   max-width:480px;
-  margin:0 auto 40px;
+  margin:0 auto 32px;
 }
 .hero-pills{
   display:flex;
   flex-wrap:wrap;
   gap:10px;
   justify-content:center;
-  margin-bottom:56px;
+  margin-bottom:48px;
 }
 .hero-pill{
   display:flex;
   align-items:center;
   gap:8px;
   background:var(--card);
-  border:1px solid var(--line2);
+  border:2px solid var(--line);
   border-radius:100px;
-  padding:8px 18px;
+  padding:9px 18px;
   font-size:13px;
-  font-weight:500;
+  font-weight:800;
   color:var(--ink2);
-  box-shadow:0 1px 3px rgba(0,0,0,.04);
 }
-.hero-pill svg{width:16px;height:16px;color:var(--blue);flex-shrink:0}
+.hero-pill svg{width:16px;height:16px;color:var(--green);flex-shrink:0}
 .features-row{
   display:grid;
   grid-template-columns:repeat(3,1fr);
   gap:16px;
-  max-width:700px;
+  max-width:720px;
   margin:0 auto;
 }
 @media(max-width:600px){.features-row{grid-template-columns:1fr;max-width:340px;}}
 .feat{
   background:var(--card);
-  border:1px solid var(--line);
+  border:2px solid var(--line);
+  border-bottom-width:4px;
   border-radius:var(--r);
   padding:20px;
   text-align:left;
 }
 .feat-icon{
-  width:36px;height:36px;border-radius:var(--r-sm);
-  background:var(--blue-l);
+  width:40px;height:40px;border-radius:12px;
+  background:var(--green-l);
   display:flex;align-items:center;justify-content:center;
   margin-bottom:12px;
 }
-.feat-icon svg{width:18px;height:18px;color:var(--blue)}
-.feat h3{font-size:13px;font-weight:600;margin-bottom:5px}
-.feat p{font-size:12px;color:var(--ink2);line-height:1.6}
+.feat-icon svg{width:20px;height:20px;color:var(--green-dark)}
+.feat h3{font-family:var(--serif);font-size:14px;font-weight:700;margin-bottom:5px}
+.feat p{font-size:12px;font-weight:600;color:var(--ink2);line-height:1.6}
 .hero-foot{
-  margin-top:40px;
+  margin-top:36px;
   font-family:var(--serif);
   font-size:17px;
-  font-weight:300;
-  font-style:italic;
+  font-weight:700;
   color:var(--ink3);
 }
 
@@ -194,11 +239,10 @@ html,body{
   margin-bottom:24px;
 }
 .section-title{
-  font-size:11px;
-  font-weight:700;
-  letter-spacing:.1em;
-  text-transform:uppercase;
-  color:var(--ink3);
+  font-family:var(--serif);
+  font-size:15px;
+  font-weight:800;
+  color:var(--ink);
 }
 .book-grid{
   display:grid;
@@ -210,18 +254,18 @@ html,body{
 }
 .book-card{
   background:var(--card);
-  border:1px solid var(--line);
+  border:2px solid var(--line);
+  border-bottom-width:4px;
   border-radius:var(--r);
   overflow:hidden;
   cursor:pointer;
-  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
-  box-shadow:0 1px 3px rgba(0,0,0,.04);
+  transition:transform .1s ease,border-color .12s ease;
 }
 .book-card:hover{
-  transform:translateY(-4px);
-  box-shadow:0 12px 32px rgba(0,0,0,.1);
-  border-color:var(--blue);
+  transform:translateY(-2px);
+  border-color:var(--green-b);
 }
+.book-card:active{transform:translateY(1px)}
 .book-cover{
   aspect-ratio:2/3;
   position:relative;overflow:hidden;
@@ -238,12 +282,12 @@ html,body{
 .book-body{padding:14px 16px 16px}
 .book-title{
   font-family:var(--serif);
-  font-size:16px;font-weight:400;line-height:1.3;
+  font-size:15px;font-weight:700;line-height:1.3;
   margin-bottom:4px;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
 }
 .book-author{
-  font-size:12px;font-weight:500;
+  font-size:11px;font-weight:700;
   color:var(--ink3);
   margin-bottom:12px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -252,77 +296,75 @@ html,body{
 .book-footer{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .ep-badge{
   display:inline-flex;align-items:center;gap:5px;
-  font-size:11px;font-weight:600;
-  background:var(--bg);border:1px solid var(--line2);
+  font-size:11px;font-weight:800;
+  background:var(--bg);border:2px solid var(--line);
   border-radius:100px;padding:4px 10px;color:var(--ink2);
 }
 .ep-badge svg{width:11px;height:11px;color:var(--ink3)}
 .continue-pill{
   display:inline-flex;align-items:center;gap:4px;
-  font-size:11px;font-weight:600;
-  background:var(--green-l);color:var(--green);
+  font-size:11px;font-weight:800;
+  background:var(--green-l);color:var(--green-dark);
   border-radius:100px;padding:4px 10px;
 }
 .continue-pill svg{width:10px;height:10px}
-.book-progress{height:2px;background:var(--line);border-radius:2px;margin-top:12px;overflow:hidden}
-.book-progress-fill{height:100%;background:var(--blue);border-radius:2px;transition:width .4s}
+.book-progress{height:6px;background:var(--line);border-radius:3px;margin-top:12px;overflow:hidden}
+.book-progress-fill{height:100%;background:var(--green);border-radius:3px;transition:width .4s}
 
 /* ── READER ── */
 #pageReader{width:100%;}
 .reader-wrap{max-width:700px;margin:0 auto;padding:24px 24px 80px;width:100%;overflow-x:hidden;}
 @media(max-width:600px){.reader-wrap{padding:12px 14px 60px;}}
+.reader-wrap.locked #readerMain{filter:blur(6px);pointer-events:none;user-select:none}
 
 .back-btn{
   display:inline-flex;align-items:center;gap:6px;
-  font-size:13px;font-weight:500;color:var(--ink2);
+  font-size:13px;font-weight:800;color:var(--ink2);
   cursor:pointer;background:none;border:none;font-family:var(--sans);
   padding:0;margin-bottom:20px;
 }
 .back-btn:hover{color:var(--ink)}
 .back-btn svg{width:16px;height:16px}
 
-/* EP STRIP */
+/* EP STRIP — Duolingo-style path */
 .ep-strip-wrap{
-  background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px 12px;margin-bottom:14px;
+  background:var(--card);border:2px solid var(--line);
+  border-radius:var(--r);padding:14px 12px;margin-bottom:14px;
   overflow:hidden;max-width:100%;
 }
-.ep-strip-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px}
-.ep-strip{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.ep-strip-label{font-family:var(--serif);font-size:12px;font-weight:700;color:var(--ink3);margin-bottom:12px}
+.ep-strip{display:flex;align-items:center;gap:0;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
 .ep-strip::-webkit-scrollbar{display:none}
-.ep-legend-row{display:flex;gap:14px;margin-top:10px;padding-top:10px;border-top:.5px solid var(--line);flex-wrap:wrap}
-.ep-leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);font-weight:500}
-.ep-leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
-.ep-leg-dot.done{background:var(--green-l);border:1px solid var(--green-b)}
-.ep-leg-dot.cur{background:var(--blue);border:1px solid var(--blue)}
-.ep-leg-dot.available{background:var(--blue-l);border:1.5px solid var(--blue)}
-.ep-leg-dot.future{background:var(--line);border:1px solid var(--line2)}
-.ep-legend-row{display:flex;gap:14px;margin-top:10px;padding-top:10px;border-top:.5px solid var(--line)}
-.ep-leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);font-weight:500}
-.ep-leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
-.ep-leg-dot.done{background:var(--green-l);border:1px solid var(--green-b)}
-.ep-leg-dot.cur{background:var(--blue);border:1px solid var(--blue)}
-.ep-leg-dot.available{background:var(--blue-l);border:1px solid var(--blue-b)}
-.ep-leg-dot.future{background:var(--line);border:1px solid var(--line2);opacity:.5}
+.ep-link{flex-shrink:0;width:20px;height:3px;background:var(--line2);border-radius:2px}
+.ep-link.done{background:var(--green-b)}
+.ep-legend-row{display:flex;gap:14px;margin-top:12px;padding-top:12px;border-top:2px dashed var(--line);flex-wrap:wrap}
+.ep-leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);font-weight:700}
+.ep-leg-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.ep-leg-dot.done{background:var(--green)}
+.ep-leg-dot.cur{background:var(--blue)}
+.ep-leg-dot.available{background:var(--gold)}
+.ep-leg-dot.future{background:var(--line2)}
 .ep-pill{
-  flex-shrink:0;width:34px;height:34px;border-radius:var(--r-sm);
-  border:1px solid var(--line2);background:var(--bg);
-  font-size:11px;font-weight:600;cursor:pointer;
+  flex-shrink:0;width:40px;height:40px;border-radius:50%;
+  border:none;background:var(--line);
+  font-size:13px;font-weight:800;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  color:var(--ink3);transition:all .12s;position:relative;flex-direction:column;gap:1px;
+  color:#fff;transition:transform .1s;position:relative;
+  box-shadow:0 3px 0 var(--line2);
 }
-.ep-pill:hover:not(.lk):not(.future){border-color:var(--blue);color:var(--blue);background:var(--blue-l)}
+.ep-pill:active:not(.lk):not(.future){transform:translateY(2px);box-shadow:0 1px 0 var(--line2)}
 /* Done — green check */
-.ep-pill.done{background:var(--green-l);border-color:var(--green-b);color:var(--green)}
-.ep-pill.done svg{width:12px;height:12px}
-/* Current — solid blue */
-.ep-pill.cur{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700}
-/* Available today — blue outline */
-.ep-pill.available{background:var(--blue-l);border-color:var(--blue);color:var(--blue);font-weight:600}
-/* Locked by timer — greyed, timer icon */
-.ep-pill.lk{background:var(--bg);border-color:var(--line);color:var(--ink3);opacity:.5;cursor:not-allowed}
+.ep-pill.done{background:var(--green);box-shadow:0 3px 0 var(--green-dark)}
+.ep-pill.done svg{width:16px;height:16px}
+/* Current — bigger solid blue with ring */
+.ep-pill.cur{background:var(--blue);box-shadow:0 3px 0 var(--blue-dark);width:46px;height:46px;font-size:15px;outline:3px solid var(--blue-l)}
+/* Available today — gold, ready to tap */
+.ep-pill.available{background:var(--gold);color:#5c4600;box-shadow:0 3px 0 var(--gold-dark)}
+/* Locked by timer/day limit — greyed, lock icon */
+.ep-pill.lk{background:var(--line);color:var(--ink3);box-shadow:0 3px 0 var(--line2);cursor:not-allowed}
+.ep-pill.lk svg{width:14px;height:14px}
 /* Future — very faint, not clickable */
-.ep-pill.future{background:transparent;border-color:var(--line);color:var(--ink3);opacity:.2;cursor:not-allowed;pointer-events:none}
+.ep-pill.future{background:var(--bg);color:var(--ink3);opacity:.5;cursor:not-allowed;pointer-events:none;box-shadow:0 3px 0 var(--line)}
 
 /* STATS BAR */
 .stats-row{
@@ -332,14 +374,15 @@ html,body{
   margin-bottom:14px;
 }
 .stat-card{
-  background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px 12px;
+  background:var(--card);border:2px solid var(--line);
+  border-bottom-width:4px;
+  border-radius:var(--r);padding:12px 14px;
   min-width:0;overflow:hidden;
 }
-.stat-label{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stat-val{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stat-bar{height:3px;background:var(--bg);border-radius:2px;margin-top:8px;overflow:hidden}
-.stat-fill{height:100%;border-radius:2px;transition:width .4s}
+.stat-label{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-val{font-family:var(--serif);font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-bar{height:8px;background:var(--bg);border-radius:4px;margin-top:8px;overflow:hidden}
+.stat-fill{height:100%;border-radius:4px;transition:width .4s}
 .stat-fill.t{background:var(--green)}
 .stat-fill.t.warn{background:var(--amber)}
 .stat-fill.t.full{background:var(--red)}
@@ -347,24 +390,24 @@ html,body{
 
 /* AD SCHEDULE */
 .ad-schedule{
-  background:var(--card);border:1px solid var(--line);
+  background:var(--card);border:2px solid var(--line);
   border-radius:var(--r);padding:12px 14px;margin-bottom:14px;
 }
 .ad-schedule-head{
   display:flex;align-items:center;justify-content:space-between;
   margin-bottom:8px;
 }
-.ad-schedule-label{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
-.ad-schedule-time{font-size:11px;font-weight:500;color:var(--ink2)}
+.ad-schedule-label{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.ad-schedule-time{font-size:11px;font-weight:800;color:var(--ink2)}
 .ad-rail-wrap{position:relative}
-.ad-rail{height:5px;background:var(--bg);border-radius:3px;overflow:hidden}
-.ad-fill{height:100%;border-radius:3px;background:var(--green);transition:width 1s linear}
+.ad-rail{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.ad-fill{height:100%;border-radius:4px;background:var(--green);transition:width 1s linear}
 .ad-fill.warn{background:var(--amber)}
 .ad-fill.full{background:var(--red)}
-.ad-marker{position:absolute;top:-3px;width:2px;height:11px;background:var(--blue);border-radius:1px;transform:translateX(-50%)}
+.ad-marker{position:absolute;top:-3px;width:2px;height:14px;background:var(--blue);border-radius:1px;transform:translateX(-50%)}
 .ad-marker.hit{background:var(--ink3)}
 .ad-ticks{display:flex;gap:0;margin-top:6px;position:relative;height:14px;overflow:hidden;}
-.ad-tick{font-size:10px;color:var(--ink3);position:absolute;transform:translateX(-50%)}
+.ad-tick{font-size:10px;font-weight:700;color:var(--ink3);position:absolute;transform:translateX(-50%)}
 
 /* READER HEADER */
 .reader-header{
@@ -372,48 +415,51 @@ html,body{
   gap:10px;margin-bottom:6px;flex-wrap:wrap;
 }
 .reader-ep-title{
-  font-family:var(--serif);font-size:18px;font-weight:400;
+  font-family:var(--serif);font-size:19px;font-weight:700;
   line-height:1.3;flex:1;min-width:0;
 }
 .timer-badge{
   flex-shrink:0;
   display:inline-flex;align-items:center;gap:5px;
-  font-size:12px;font-weight:600;
-  padding:5px 10px;border-radius:100px;
+  font-size:12px;font-weight:800;
+  padding:6px 12px;border-radius:100px;
   white-space:nowrap;
 }
-.timer-badge.ok{background:#2563eb;color:#fff;box-shadow:0 1px 6px rgba(37,99,235,.35)}
-.timer-badge.warn{background:#b45309;color:#fff;box-shadow:0 1px 4px rgba(180,83,9,.25)}
-.timer-badge.lk{background:#dc2626;color:#fff;box-shadow:0 1px 4px rgba(220,38,38,.25)}
+.timer-badge.ok{background:var(--blue);color:#fff;box-shadow:0 3px 0 var(--blue-dark)}
+.timer-badge.warn{background:var(--amber);color:#fff;box-shadow:0 3px 0 #c76f00}
+.timer-badge.lk{background:var(--red);color:#fff;box-shadow:0 3px 0 var(--red-dark)}
 .timer-badge svg{width:13px;height:13px;flex-shrink:0}
-.progress-rail{height:2px;background:var(--line);border-radius:2px;margin:12px 0 28px}
-.progress-fill{height:2px;background:var(--blue);border-radius:2px;transition:width .5s}
+.progress-rail{height:8px;background:var(--line);border-radius:4px;margin:14px 0 28px}
+.progress-fill{height:8px;background:var(--green);border-radius:4px;transition:width .5s}
 
 /* READER BODY */
 .reader-body{
-  font-family:var(--serif);
+  font-family:'Nunito',var(--sans);
   font-size:18px;
+  font-weight:600;
   line-height:1.9;
   color:var(--ink);
   word-break:break-word;
   overflow-wrap:break-word;
+  position:relative;
 }
 @media(max-width:600px){
   .reader-body{font-size:16px;line-height:1.85;}
   .reader-ep-title{font-size:17px;}
-  .ep-pill{width:30px;height:30px;font-size:10px;}
+  .ep-pill{width:34px;height:34px;font-size:11px;}
+  .ep-pill.cur{width:40px;height:40px;font-size:13px;}
   .reader-nav{gap:8px;}
-  .nav-btn{padding:8px 14px;font-size:13px;}
+  .nav-btn{padding:10px 16px;font-size:13px;}
 }
 .reader-body p{margin-bottom:1.4em}
 .reader-body em{font-style:italic}
 .reader-body p>em:only-child{font-style:normal} /* whole-para em = not italic, just bad markup */
-.reader-body strong{font-weight:700}
+.reader-body strong{font-weight:800}
 .reader-body u{text-decoration:underline}
 .reader-body .rh{
   font-family:var(--serif);
   font-size:1.15em;
-  font-weight:600;
+  font-weight:700;
   margin-top:2.2em;
   margin-bottom:.5em;
   letter-spacing:-.02em;
@@ -421,27 +467,28 @@ html,body{
 .reader-nav{
   display:flex;align-items:center;justify-content:space-between;
   gap:8px;margin-top:40px;padding-top:18px;
-  border-top:1px solid var(--line);
+  border-top:2px solid var(--line);
   flex-wrap:nowrap;
 }
-.reader-nav-ep{font-size:13px;color:var(--ink3);font-weight:500}
+.reader-nav-ep{font-size:13px;color:var(--ink3);font-weight:800}
 .nav-btn{
   display:inline-flex;align-items:center;gap:7px;
-  padding:9px 20px;border-radius:var(--r);
-  font-size:14px;font-weight:500;cursor:pointer;
-  font-family:var(--sans);border:1px solid var(--line2);
-  background:transparent;color:var(--ink);transition:all .12s;
+  padding:11px 22px;border-radius:14px;
+  font-size:14px;font-weight:800;cursor:pointer;
+  font-family:var(--sans);border:none;
+  background:#fff;color:var(--ink2);transition:transform .08s;
+  box-shadow:0 3px 0 var(--line2);border:2px solid var(--line);
 }
-.nav-btn:hover{background:var(--bg)}
-.nav-btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-.nav-btn.primary:hover{background:#1d4ed8}
-.nav-btn:disabled{opacity:.35;cursor:default}
+.nav-btn:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 var(--line2)}
+.nav-btn.primary{background:var(--green);border-color:var(--green-dark);color:#fff;box-shadow:0 3px 0 var(--green-dark)}
+.nav-btn:disabled{opacity:.4;cursor:default}
 .nav-btn svg{width:15px;height:15px}
 
 /* AD BREAK */
 .ad-wrap{
   background:#000;border-radius:var(--r);overflow:hidden;
   margin-bottom:16px;position:relative;
+  border:2px solid var(--line);
 }
 .ad-video-zone{
   width:100%;aspect-ratio:16/9;
@@ -481,61 +528,54 @@ html,body{
 .ad-bottom-name{font-size:13px;color:#fff;font-weight:500}
 .ad-bottom-context{font-size:11px;color:rgba(255,255,255,.4)}
 
-/* DAY DONE */
-.daydone-wrap{max-width:700px;margin:0 auto;padding:16px;}
-.daydone-card{
-  background:var(--card);border:1px solid var(--line);
-  border-radius:16px;padding:36px 28px;text-align:center;
-}
-.daydone-icon{
-  width:56px;height:56px;border-radius:50%;
-  background:var(--amber-l);
-  display:flex;align-items:center;justify-content:center;
-  margin:0 auto 16px;
-}
-.daydone-icon svg{width:28px;height:28px;color:var(--amber)}
-.daydone-card h2{font-family:var(--serif);font-size:24px;font-weight:400;margin-bottom:8px}
-.daydone-card p{font-size:14px;color:var(--ink2);line-height:1.65;margin-bottom:6px}
-.daydone-timer{
-  font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;
-  color:var(--blue);margin:14px 0 22px;letter-spacing:-1px;
-}
-/* ── Purchase/limit modal ── */
-#limitModal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:none;align-items:center;justify-content:center;padding:16px}
+/* ── Day-complete celebration popup (replaces old inline day-done section) ── */
+#limitModal{position:fixed;inset:0;background:rgba(60,60,60,.6);z-index:9999;display:none;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
 #limitModal.show{display:flex}
-.limit-card{background:var(--bg);border-radius:var(--r);padding:32px 28px;max-width:420px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.18)}
-.limit-card h2{font-family:var(--serif);font-size:22px;font-weight:400;margin-bottom:10px}
-.limit-card p{font-size:14px;color:var(--ink2);line-height:1.6;margin-bottom:0}
-.limit-tomorrow{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--blue);margin:16px 0 4px;letter-spacing:-1px}
-.limit-until{font-size:12px;color:var(--ink3);margin-bottom:20px}
-.limit-divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--ink3);font-size:12px}
-.limit-divider::before,.limit-divider::after{content:'';flex:1;height:.5px;background:var(--line)}
-.limit-unlock-btn{width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:var(--r-sm);font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px}
-.limit-unlock-btn:hover{background:#1d4ed8}
-.limit-unlock-btn:disabled{opacity:.6;cursor:not-allowed}
-.limit-unlock-desc{font-size:12px;color:var(--ink3);margin-bottom:18px}
-.limit-close{font-size:13px;color:var(--ink3);cursor:pointer;text-decoration:underline;background:none;border:none;padding:4px}
-.paid-banner{background:#f0fdf4;border:1px solid #86efac;border-radius:var(--r-sm);padding:10px 14px;font-size:13px;color:#16a34a;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.limit-card{background:var(--card);border-radius:24px;padding:32px 28px;max-width:420px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.25);position:relative;overflow:hidden;margin:auto}
+.confetti-piece{position:absolute;top:-10px;width:8px;height:14px;border-radius:2px;opacity:0;pointer-events:none;animation:confetti-fall 1.6s ease-in forwards}
+@keyframes confetti-fall{
+  0%{opacity:1;transform:translateY(0) rotate(0deg)}
+  100%{opacity:0;transform:translateY(340px) rotate(360deg)}
+}
+.limit-badge{
+  width:64px;height:64px;border-radius:50%;
+  background:var(--gold-l);border:3px solid var(--gold);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 14px;font-size:30px;
+}
+.limit-card h2{font-family:var(--serif);font-size:24px;font-weight:800;margin-bottom:8px;color:var(--ink)}
+.limit-card p{font-size:14px;font-weight:700;color:var(--ink2);line-height:1.6;margin-bottom:0}
+.limit-stats-row{display:flex;gap:10px;margin:18px 0}
+.limit-stat{flex:1;background:var(--bg);border:2px solid var(--line);border-radius:14px;padding:10px 8px}
+.limit-stat b{display:block;font-family:var(--serif);font-size:20px;color:var(--green-dark)}
+.limit-stat span{font-size:11px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em}
+.limit-tomorrow{font-family:var(--serif);font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--blue-dark);margin:14px 0 2px;letter-spacing:-1px}
+.limit-until{font-size:11px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:18px}
+.limit-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--ink3);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.limit-divider::before,.limit-divider::after{content:'';flex:1;height:2px;background:var(--line)}
+.limit-unlock-btn{width:100%;padding:15px;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px}
+.limit-unlock-desc{font-size:12px;font-weight:700;color:var(--ink3);margin-bottom:16px}
+.limit-close{font-size:13px;font-weight:800;color:var(--ink3);cursor:pointer;text-decoration:underline;background:none;border:none;padding:4px}
+.paid-banner{background:var(--green-l);border:2px solid var(--green-b);border-radius:var(--r-sm);padding:10px 14px;font-size:13px;font-weight:800;color:var(--green-dark);display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .earn-list{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
 .earn-row{
   display:flex;align-items:center;justify-content:space-between;
-  background:var(--bg);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px 16px;gap:12px;
+  background:var(--bg);border:2px solid var(--line);
+  border-radius:var(--r);padding:11px 14px;gap:12px;text-align:left;
 }
-.earn-info{text-align:left}
-.earn-info strong{font-size:14px;font-weight:600;display:block;margin-bottom:2px}
-.earn-info span{font-size:12px;color:var(--ink2)}
+.earn-info{text-align:left;display:flex;align-items:center;gap:10px}
+.earn-icon{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
+.earn-text strong{font-size:13px;font-weight:800;display:block;margin-bottom:1px;color:var(--ink)}
+.earn-text span{font-size:11px;font-weight:700;color:var(--ink2)}
 .earn-btn{
-  padding:8px 16px;border-radius:var(--r-sm);font-size:13px;font-weight:600;
-  cursor:pointer;font-family:var(--sans);white-space:nowrap;border:1px solid;
-  transition:all .12s;
+  padding:9px 16px;border-radius:12px;font-size:12px;font-weight:800;
+  cursor:pointer;font-family:var(--sans);white-space:nowrap;
+  transition:transform .08s;flex-shrink:0;
 }
-.earn-btn.blue{background:var(--blue-l);border-color:var(--blue-b);color:var(--blue)}
-.earn-btn.blue:hover{background:var(--blue);color:#fff}
-.earn-btn.def{background:transparent;border-color:var(--line2);color:var(--ink)}
-.earn-btn.def:hover{background:var(--bg)}
-.earn-btn.green{background:var(--green-l);border-color:var(--green-b);color:var(--green)}
-.earn-btn.green:hover{background:var(--green);color:#fff}
+.earn-btn:active{transform:translateY(2px)}
+.earn-btn.blue{background:var(--blue);color:#fff;box-shadow:0 3px 0 var(--blue-dark)}
+.earn-btn.def{background:#fff;color:var(--ink);border:2px solid var(--line);box-shadow:0 3px 0 var(--line2)}
+.earn-btn.green{background:var(--green);color:#fff;box-shadow:0 3px 0 var(--green-dark)}
 
 /* ── ADMIN ── */
 .admin-shell{max-width:760px;margin:0 auto;padding:24px 24px 80px}
@@ -543,58 +583,58 @@ html,body{
 
 .admin-login-card{
   max-width:380px;margin:60px auto;
-  background:var(--card);border:1px solid var(--line);
-  border-radius:16px;padding:36px 32px;text-align:center;
+  background:var(--card);border:2px solid var(--line);border-bottom-width:4px;
+  border-radius:22px;padding:36px 32px;text-align:center;
 }
-.admin-login-card h2{font-family:var(--serif);font-size:24px;font-weight:400;margin-bottom:8px}
-.admin-login-card p{font-size:14px;color:var(--ink2);margin-bottom:24px}
+.admin-login-card h2{font-family:var(--serif);font-size:24px;font-weight:800;margin-bottom:8px}
+.admin-login-card p{font-size:14px;font-weight:700;color:var(--ink2);margin-bottom:24px}
 .admin-input{
-  width:100%;padding:11px 14px;border-radius:var(--r);
-  border:1px solid var(--line2);font-size:16px;
-  background:var(--bg);color:var(--ink);font-family:var(--sans);
+  width:100%;padding:12px 14px;border-radius:14px;
+  border:2px solid var(--line2);font-size:16px;
+  background:var(--bg);color:var(--ink);font-family:var(--sans);font-weight:700;
   margin-bottom:12px;text-align:center;letter-spacing:4px;
 }
-.admin-input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-l)}
+.admin-input:focus{outline:none;border-color:var(--blue)}
 .admin-login-btn{
-  width:100%;padding:11px;border-radius:var(--r);
-  font-size:14px;font-weight:600;
-  background:var(--blue);color:#fff;border:none;
-  cursor:pointer;font-family:var(--sans);transition:background .12s;
+  width:100%;padding:12px;border-radius:14px;
+  font-size:14px;font-weight:800;
+  background:var(--blue);color:#fff;border:none;box-shadow:0 4px 0 var(--blue-dark);
+  cursor:pointer;font-family:var(--sans);transition:transform .08s;
 }
-.admin-login-btn:hover{background:#1d4ed8}
-.login-err{font-size:13px;color:var(--red);margin-top:10px;display:none}
+.admin-login-btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--blue-dark)}
+.login-err{font-size:13px;font-weight:800;color:var(--red);margin-top:10px;display:none}
 
 .admin-tabs{
-  display:flex;gap:2px;background:var(--card);
-  border:1px solid var(--line);border-radius:var(--r);padding:4px;
+  display:flex;gap:4px;background:var(--card);
+  border:2px solid var(--line);border-radius:16px;padding:4px;
   margin-bottom:20px;
 }
 .admin-tab{
-  flex:1;padding:8px 12px;font-size:13px;font-weight:500;
-  border-radius:var(--r-sm);cursor:pointer;border:none;
+  flex:1;padding:9px 12px;font-size:13px;font-weight:800;
+  border-radius:12px;cursor:pointer;border:none;
   background:transparent;color:var(--ink2);font-family:var(--sans);
   transition:all .12s;text-align:center;
 }
-.admin-tab.on{background:var(--blue);color:#fff;box-shadow:0 1px 4px rgba(37,99,235,.25)}
+.admin-tab.on{background:var(--blue);color:#fff;box-shadow:0 3px 0 var(--blue-dark)}
 
 .admin-card{
-  background:var(--card);border:1px solid var(--line);
+  background:var(--card);border:2px solid var(--line);border-bottom-width:4px;
   border-radius:var(--r);padding:20px;margin-bottom:16px;
 }
 .admin-card-title{
-  font-size:13px;font-weight:600;margin-bottom:16px;
+  font-family:var(--serif);font-size:14px;font-weight:700;margin-bottom:16px;
   display:flex;align-items:center;justify-content:space-between;
 }
 .count-badge{
-  font-size:11px;font-weight:600;
-  background:var(--blue-l);color:var(--blue);
-  border-radius:6px;padding:3px 9px;
+  font-size:11px;font-weight:800;
+  background:var(--blue-l);color:var(--blue-dark);
+  border-radius:100px;padding:3px 10px;
 }
 
-.add-label{font-size:12px;font-weight:600;color:var(--ink2);display:block;margin-bottom:6px;margin-top:2px}
+.add-label{font-size:12px;font-weight:800;color:var(--ink2);display:block;margin-bottom:6px;margin-top:2px}
 .field{
-  width:100%;padding:9px 12px;border-radius:var(--r-sm);
-  border:1px solid var(--line2);font-size:13px;
+  width:100%;padding:10px 12px;border-radius:12px;
+  border:2px solid var(--line2);font-size:13px;font-weight:700;
   background:var(--bg);color:var(--ink);font-family:var(--sans);margin-bottom:10px;
 }
 .field:focus{outline:none;border-color:var(--blue)}
@@ -602,97 +642,96 @@ html,body{
 .cover-row{display:flex;gap:16px;align-items:flex-start;margin-bottom:14px}
 .cover-box{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px}
 .cover-empty{
-  width:80px;height:108px;border-radius:var(--r-sm);
-  border:2px dashed var(--line2);display:flex;align-items:center;
+  width:80px;height:108px;border-radius:14px;
+  border:3px dashed var(--line2);display:flex;align-items:center;
   justify-content:center;cursor:pointer;background:var(--bg);
   transition:all .14s;flex-direction:column;gap:5px;
-  color:var(--ink3);font-size:11px;font-weight:500;text-align:center;padding:8px;
+  color:var(--ink3);font-size:11px;font-weight:800;text-align:center;padding:8px;
 }
 .cover-empty:hover{border-color:var(--blue);background:var(--blue-l);color:var(--blue)}
 .cover-empty svg{width:22px;height:22px}
-.cover-thumb{width:80px;height:108px;border-radius:var(--r-sm);object-fit:cover;border:1px solid var(--line);display:none}
-.cover-change{font-size:11px;font-weight:500;color:var(--blue);cursor:pointer;display:none;text-align:center}
+.cover-thumb{width:80px;height:108px;border-radius:14px;object-fit:cover;border:2px solid var(--line);display:none}
+.cover-change{font-size:11px;font-weight:800;color:var(--blue);cursor:pointer;display:none;text-align:center}
 
 .file-row{
-  border:1px solid var(--line2);border-radius:var(--r);
+  border:2px solid var(--line2);border-radius:var(--r);
   padding:11px 14px;display:flex;align-items:center;gap:10px;
   margin-bottom:10px;background:var(--bg);cursor:pointer;transition:all .12s;
 }
 .file-row:hover{border-color:var(--blue);background:var(--blue-l)}
 .file-row.sel{border-color:var(--green-b);background:var(--green-l)}
-.file-row-icon{flex-shrink:0;width:32px;height:32px;border-radius:var(--r-sm);background:var(--card);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center}
+.file-row-icon{flex-shrink:0;width:32px;height:32px;border-radius:10px;background:var(--card);border:2px solid var(--line2);display:flex;align-items:center;justify-content:center}
 .file-row-icon svg{width:16px;height:16px;color:var(--ink2)}
 .file-row.sel .file-row-icon{background:var(--green-l);border-color:var(--green-b)}
-.file-row.sel .file-row-icon svg{color:var(--green)}
+.file-row.sel .file-row-icon svg{color:var(--green-dark)}
 .file-row-info{flex:1;min-width:0}
-.file-row-info p{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.file-row-info span{font-size:11px;color:var(--ink3)}
-.file-row.sel .file-row-info span{color:var(--green)}
-.file-row-btn{font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--card);cursor:pointer;font-family:var(--sans);color:var(--ink);white-space:nowrap;flex-shrink:0}
+.file-row-info p{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-row-info span{font-size:11px;font-weight:700;color:var(--ink3)}
+.file-row.sel .file-row-info span{color:var(--green-dark)}
+.file-row-btn{font-size:12px;font-weight:800;padding:7px 14px;border-radius:10px;border:2px solid var(--line2);background:var(--card);cursor:pointer;font-family:var(--sans);color:var(--ink);white-space:nowrap;flex-shrink:0}
 
 .big-btn{
-  width:100%;padding:12px;border-radius:var(--r);font-size:14px;font-weight:600;
+  width:100%;padding:13px;border-radius:14px;font-size:14px;font-weight:800;
   cursor:pointer;font-family:var(--sans);border:none;
-  color:#fff;background:var(--blue);
+  color:#fff;background:var(--blue);box-shadow:0 4px 0 var(--blue-dark);
   display:flex;align-items:center;justify-content:center;gap:8px;
-  transition:all .12s;margin-top:4px;
+  transition:transform .08s;margin-top:4px;
 }
-.big-btn:hover{background:#1d4ed8}
-.big-btn.green{background:var(--green)}
-.big-btn.green:hover{background:#15803d}
+.big-btn:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 var(--blue-dark)}
+.big-btn.green{background:var(--green);box-shadow:0 4px 0 var(--green-dark)}
 .big-btn:disabled{opacity:.4;cursor:not-allowed}
 .big-btn svg{width:16px;height:16px}
 
-.list-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.list-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:2px solid var(--line)}
 .list-row:last-child{border-bottom:none}
-.list-num{width:26px;height:26px;border-radius:var(--r-sm);background:var(--blue-l);color:var(--blue);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.list-num{width:28px;height:28px;border-radius:10px;background:var(--blue-l);color:var(--blue-dark);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .list-info{flex:1;min-width:0}
-.list-info p{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.list-info span{font-size:11px;color:var(--ink3)}
-.del-btn{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:var(--r-sm);font-family:var(--sans);font-weight:500}
+.list-info p{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-info span{font-size:11px;font-weight:700;color:var(--ink3)}
+.del-btn{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:10px;font-family:var(--sans);font-weight:800}
 .del-btn:hover{background:var(--red-l)}
 
-.size-warn{font-size:12px;color:var(--amber);background:var(--amber-l);border:1px solid #fcd34d;border-radius:var(--r-sm);padding:8px 12px;margin-bottom:10px;display:none;line-height:1.5}
+.size-warn{font-size:12px;font-weight:700;color:var(--amber);background:var(--amber-l);border:2px solid #fcd34d;border-radius:12px;padding:8px 12px;margin-bottom:10px;display:none;line-height:1.5}
 .size-warn.show{display:block}
 
 .prog-wrap{display:none;margin-bottom:10px}
 .prog-wrap.on{display:block}
-.prog-bar-outer{height:4px;background:var(--bg);border-radius:2px;overflow:hidden}
-.prog-bar-inner{height:100%;background:var(--blue);border-radius:2px;transition:width .3s}
+.prog-bar-outer{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.prog-bar-inner{height:100%;background:var(--green);border-radius:4px;transition:width .3s}
 
 /* ANALYTICS */
 .analytics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
 @media(max-width:500px){.analytics-grid{grid-template-columns:repeat(2,1fr)}}
-.metric-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
-.metric-val{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-1px;margin-bottom:2px}
-.metric-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
-.metric-sub{font-size:12px;color:var(--ink2);margin-top:4px}
-.chart-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
-.chart-title{font-size:13px;font-weight:600;margin-bottom:16px;color:var(--ink)}
+.metric-card{background:var(--card);border:2px solid var(--line);border-bottom-width:4px;border-radius:var(--r);padding:16px}
+.metric-val{font-family:var(--serif);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-1px;margin-bottom:2px}
+.metric-label{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.metric-sub{font-size:12px;font-weight:700;color:var(--ink2);margin-top:4px}
+.chart-card{background:var(--card);border:2px solid var(--line);border-bottom-width:4px;border-radius:var(--r);padding:18px;margin-bottom:14px}
+.chart-title{font-family:var(--serif);font-size:14px;font-weight:700;margin-bottom:16px;color:var(--ink)}
 .bar-chart{display:flex;align-items:flex-end;gap:4px;height:80px}
 .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}
 .bar{width:100%;background:var(--blue-l);border-radius:4px 4px 0 0;min-height:3px;transition:height .5s}
 .bar.blue{background:var(--blue)}
 .bar.green{background:var(--green-l);border-top:2px solid var(--green)}
-.bar-lbl{font-size:9px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28px;text-align:center}
-.pop-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.bar-lbl{font-size:9px;font-weight:700;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28px;text-align:center}
+.pop-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:2px solid var(--line)}
 .pop-row:last-child{border-bottom:none}
-.pop-rank{width:22px;text-align:center;font-size:12px;font-weight:700;color:var(--ink3);flex-shrink:0}
+.pop-rank{width:22px;text-align:center;font-size:12px;font-weight:800;color:var(--ink3);flex-shrink:0}
 .pop-info{flex:1;min-width:0}
-.pop-info p{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pop-info span{font-size:11px;color:var(--ink3)}
-.pop-stat{font-size:12px;font-weight:600;color:var(--blue);white-space:nowrap}
+.pop-info p{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pop-info span{font-size:11px;font-weight:700;color:var(--ink3)}
+.pop-stat{font-size:12px;font-weight:800;color:var(--blue-dark);white-space:nowrap}
 .sessions-table{width:100%;border-collapse:collapse;font-size:12px}
-.sessions-table th{text-align:left;padding:7px 8px;color:var(--ink3);font-weight:600;border-bottom:1px solid var(--line);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
-.sessions-table td{padding:8px 8px;border-bottom:1px solid var(--line);color:var(--ink2)}
+.sessions-table th{text-align:left;padding:7px 8px;color:var(--ink3);font-weight:800;border-bottom:2px solid var(--line);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.sessions-table td{padding:8px 8px;border-bottom:1px solid var(--line);color:var(--ink2);font-weight:700}
 .sessions-table tr:last-child td{border-bottom:none}
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px}
 
 .admin-logout-row{text-align:center;margin-top:20px}
 .logout-btn{
   display:inline-flex;align-items:center;gap:6px;
-  padding:8px 18px;border-radius:var(--r);font-size:13px;font-weight:500;
-  border:1px solid var(--red-l);background:var(--red-l);color:var(--red);
+  padding:9px 18px;border-radius:14px;font-size:13px;font-weight:800;
+  border:none;background:var(--red-l);color:var(--red-dark);
   cursor:pointer;font-family:var(--sans);
 }
 .logout-btn:hover{background:var(--red);color:#fff}
@@ -703,8 +742,8 @@ html,body{
   position:fixed;bottom:20px;left:50%;
   transform:translateX(-50%) translateY(12px);
   background:var(--ink);color:#fff;
-  padding:10px 18px;border-radius:var(--r);
-  font-size:13px;font-weight:500;
+  padding:11px 20px;border-radius:14px;
+  font-size:13px;font-weight:800;
   opacity:0;transition:all .22s;
   pointer-events:none;z-index:9999;
   white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.2);
@@ -726,7 +765,7 @@ html,body{
         <div class="hero-pills">
           <div class="hero-pill">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            6 episodes a day
+            3 episodes a day
           </div>
           <div class="hero-pill">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
@@ -778,7 +817,7 @@ html,body{
 
 <!-- ══ READER ════════════════════════════════════════════════ -->
 <div id="pageReader" style="display:none">
-  <div class="reader-wrap">
+  <div class="reader-wrap" id="readerWrap">
 
     <button class="back-btn" onclick="goHome()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -851,24 +890,6 @@ html,body{
       </div>
     </div>
 
-    <!-- DAY DONE -->
-    <div id="dayDoneSection" style="display:none">
-      <div class="daydone-card">
-        <div class="daydone-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </div>
-        <h2 id="dayDoneTitle">That's your hour for today!</h2>
-        <p id="dayDoneDesc">Your timer resets automatically tomorrow, or earn more time now.</p>
-        <div class="daydone-timer" id="dayDoneTimer">23:00:00</div>
-        <p style="font-size:12px;color:var(--ink3);margin-bottom:16px">Time until automatic reset</p>
-        <div class="earn-list">
-          <div class="earn-row"><div class="earn-info"><strong>Watch an ad</strong><span>+15 minutes reading time</span></div><button class="earn-btn blue" onclick="doEarn('ad')">Watch</button></div>
-          <div class="earn-row"><div class="earn-info"><strong>Share this book</strong><span>+30 minutes &middot; +1 extra episode</span></div><button class="earn-btn def" onclick="doEarn('share')">Share</button></div>
-          <div class="earn-row"><div class="earn-info"><strong>Watch and share</strong><span>+45 minutes &middot; +2 extra episodes</span></div><button class="earn-btn green" onclick="doEarn('both')">Do both</button></div>
-        </div>
-      </div>
-    </div>
-
     <!-- READER MAIN -->
     <div id="readerMain">
       <div class="reader-header">
@@ -879,7 +900,7 @@ html,body{
         </div>
       </div>
       <div class="progress-rail"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-      <div class="reader-body" id="readerBody"></div>
+      <div class="reader-body" id="readerBody"><div id="readerWatermark"></div><div id="readerContent"></div></div>
       <div class="reader-nav">
         <button class="nav-btn" id="prevBtn" onclick="readerPrev()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -896,16 +917,34 @@ html,body{
   </div>
 </div>
 
-<!-- ══ LIMIT / PURCHASE MODAL ══════════════════════════════ -->
+<!-- ══ DAY-COMPLETE CELEBRATION / LIMIT POPUP ══════════════════════════════ -->
 <div id="limitModal">
-  <div class="limit-card">
-    <div style="font-size:28px;margin-bottom:8px">📖</div>
-    <h2>You've reached today's limit</h2>
-    <p>Come back tomorrow to continue — your next 3 episodes will be waiting.</p>
+  <div class="limit-card" id="limitCard">
+    <div class="limit-badge" id="limitBadge">🎉</div>
+    <h2 id="limitTitle">Nice work today!</h2>
+    <p id="limitDesc">You've read all your episodes for today. Come back tomorrow to continue.</p>
+    <div class="limit-stats-row">
+      <div class="limit-stat"><b id="limitStatEps">0</b><span>Episodes</span></div>
+      <div class="limit-stat"><b id="limitStatMins">0</b><span>Minutes read</span></div>
+    </div>
     <div class="limit-tomorrow" id="limitCountdown">23:59:59</div>
-    <div class="limit-until">until your episodes reset</div>
-    <div class="limit-divider">or</div>
-    <button class="limit-unlock-btn" id="unlockBtn" onclick="startPurchase()">
+    <div class="limit-until">until your next episodes unlock</div>
+    <div class="limit-divider">or keep reading now</div>
+    <div class="earn-list">
+      <div class="earn-row">
+        <div class="earn-info"><div class="earn-icon" style="background:var(--blue-l)">📺</div><div class="earn-text"><strong>Watch an ad</strong><span>+15 minutes reading time</span></div></div>
+        <button class="earn-btn blue" onclick="doEarn('ad')">Watch</button>
+      </div>
+      <div class="earn-row">
+        <div class="earn-info"><div class="earn-icon" style="background:var(--bg)">🔗</div><div class="earn-text"><strong>Share this book</strong><span>+30 min &middot; +1 episode</span></div></div>
+        <button class="earn-btn def" onclick="doEarn('share')">Share</button>
+      </div>
+      <div class="earn-row">
+        <div class="earn-info"><div class="earn-icon" style="background:var(--green-l)">⚡</div><div class="earn-text"><strong>Watch and share</strong><span>+45 min &middot; +2 episodes</span></div></div>
+        <button class="earn-btn green" onclick="doEarn('both')">Do both</button>
+      </div>
+    </div>
+    <button class="limit-unlock-btn btn3d gold" id="unlockBtn" onclick="startPurchase()">
       <svg style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
       Unlock next 10,000 words — $0.99
     </button>
@@ -1023,10 +1062,10 @@ html,body{
 </div>
 
 <!-- Screenshot protection overlay -->
-<div id="ssOverlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#faf9f7;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
-  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-  <div style="font-family:'Fraunces',Georgia,serif;font-size:22px;font-weight:400;color:#111">This content is protected</div>
-  <div style="font-size:14px;color:#6b6760;max-width:300px;text-align:center;line-height:1.6">Screenshots and screen recordings of Pagebound content are not permitted.</div>
+<div id="ssOverlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#fdfdfb;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#1cb0f6" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+  <div style="font-family:'Baloo 2',sans-serif;font-size:22px;font-weight:800;color:#3c3c3c">This content is protected</div>
+  <div style="font-size:14px;font-weight:700;color:#6b6b6b;max-width:300px;text-align:center;line-height:1.6">Screenshots and screen recordings of Pagebound content are not permitted.</div>
 </div>
 </div><!-- .app -->
 <div class="toast" id="toast"></div>
@@ -1044,7 +1083,7 @@ let adminPass = null;
 let daily = null;
 let activeBook = null;
 let bookProg = null;
-let tickTimer = null, adTimer = null, dayTimer = null, afterAdFn = null;
+let tickTimer = null, adTimer = null, afterAdFn = null;
 let pendingBookFile = null, pendingCoverFile = null, pendingAdFile = null;
 let currentBookId = null; // for analytics tracking
 
@@ -1057,6 +1096,7 @@ async function boot() {
     sessionId = d.sessionId;
     localStorage.setItem('pb_session', sessionId);
     await refreshDaily();
+    renderWatermark();
   } catch(e) { console.warn('Session init failed:', e); }
   // Route based on URL path
   const path = window.location.pathname;
@@ -1080,7 +1120,7 @@ function adH() { return { 'x-session-id': sessionId, 'x-admin-pass': adminPass, 
 
 // ── Pages ─────────────────────────────────────────────────────
 function showPage(id) { ['pageHome','pageReader','pageAdmin'].forEach(p=>g(p).style.display='none'); g(id).style.display='block'; }
-function goHome() { clearInterval(tickTimer);clearInterval(dayTimer);clearInterval(adTimer); activeBook=null;currentBookId=null; if(window.location.pathname=='/admin'){return;} showPage('pageHome'); loadBooks(); }
+function goHome() { clearInterval(tickTimer);clearInterval(adTimer);closeLimitModal();lockReaderWrap(false); activeBook=null;currentBookId=null; if(window.location.pathname=='/admin'){return;} showPage('pageHome'); loadBooks(); }
 function toggleAdmin() { showPage('pageAdmin'); clearInterval(tickTimer); g('adminLoginView').style.display='block'; g('adminPanelView').style.display='none'; g('adminPassInput').value=''; g('loginErr').style.display='none'; setTimeout(()=>g('adminPassInput').focus(),100); }
 function adminLogout() { adminPass=null; window.location.href='/'; }
 
@@ -1116,11 +1156,33 @@ async function tick(delta=10) {
 }
 async function markAdHit(t) { try{await fetch(`${API}/api/daily/ad-hit`,{method:'POST',headers:aH(),body:JSON.stringify({trigger:t})});await refreshDaily();}catch(e){} }
 async function markEpDone() { try{await fetch(`${API}/api/daily/episode-done`,{method:'POST',headers:aH()});await refreshDaily();}catch(e){} }
+// There are two independent daily caps: the server-tracked global time/ep
+// counters (isDayDone()) and the per-book "3 episodes from where you
+// stopped" window (getDailyWindow). Reading is only actually unblocked once
+// BOTH allow it — checking isDayDone() alone (as this used to) let "watch an
+// ad" (+15 min, +0 episodes) wrongly reopen a book that was capped by the
+// episode window, not the timer.
+function canContinueNow() {
+  if (isTimeDone()) return false;
+  if (activeBook) {
+    const win = getDailyWindow(activeBook.id);
+    const next = (bookProg.current_ep || 0) + 1;
+    if (next < activeBook.episodes.length && next > win.end) return false;
+  }
+  return true;
+}
+
 async function doEarn(action) {
   try { await fetch(`${API}/api/daily/earn`,{method:'POST',headers:aH(),body:JSON.stringify({action})}); await refreshDaily(); } catch(e){}
   toast('Earned '+{ad:'+15 min',share:'+30 min · +1 ep',both:'+45 min · +2 eps'}[action]);
-  updateStats();updateTimerChip();
-  if(!isDayDone()){clearInterval(dayTimer);showReaderSection('reader');loadEpisode(bookProg.current_ep);startTick();}
+  updateStats();updateTimerChip();renderStrip();
+  if(canContinueNow()){
+    closeLimitModal();lockReaderWrap(false);
+    showReaderSection('reader');loadEpisode(bookProg.current_ep);startTick();
+  } else {
+    // still capped even after earning — refresh the popup's stats/countdown
+    showDayCompleteModal();
+  }
   // Check if user just returned from Stripe payment
   checkPaidReturn();
 }
@@ -1202,23 +1264,30 @@ async function openBook(id) {
     updateStats(); updateTimerChip();
     // Re-render strip after stats update so lock states are correct
     renderStrip();
-    if(isDayDone()||isEpDone()){showReaderSection('daydone');startDayTimer();}
+    if(isDayDone()){
+      showReaderSection('reader');await loadEpisode(bookProg.current_ep||0);
+      blockForToday(isTimeDone()?'time':'episodes');
+    }
     else{showReaderSection('reader');loadEpisode(bookProg.current_ep||0);startTick();}
   } catch(e){toast('Error loading book');}
 }
 
 // ── Episode strip ─────────────────────────────────────────────
 function getDailyWindow(bookId) {
-  // Each day, 3 episodes unlock from where the reader stopped
-  // Stored in localStorage per book per day
+  // Each day, 3 episodes unlock from where the reader stopped. Only the
+  // starting point is cached per book per day — the end is recomputed from
+  // the live bonus_eps every call, so episodes earned via share/watch-ad
+  // actually extend today's window instead of being silently ignored.
   const key = 'pb_window_' + bookId + '_' + todayKeyLS();
   const saved = localStorage.getItem(key);
-  if (saved) return JSON.parse(saved);
-  // First time today — calculate window from last stop
-  const lastEp = bookProg.current_ep || 0;
-  const window = { start: lastEp, end: lastEp + EPISODES_PER_DAY - 1 };
-  localStorage.setItem(key, JSON.stringify(window));
-  return window;
+  let start;
+  if (saved) {
+    start = JSON.parse(saved).start;
+  } else {
+    start = bookProg.current_ep || 0;
+    localStorage.setItem(key, JSON.stringify({ start }));
+  }
+  return { start, end: start + EPISODES_PER_DAY - 1 + (daily?.bonus_eps || 0) };
 }
 
 function todayKeyLS() {
@@ -1243,37 +1312,38 @@ function epState(i) {
 function renderStrip() {
   const strip=g('epStrip'); strip.innerHTML='';
   if(!activeBook)return;
+  let curPillEl=null;
   activeBook.episodes.forEach((ep,i)=>{
+    if(i>0){
+      const link=document.createElement('div');
+      link.className='ep-link'+(epState(i-1)==='done'?' done':'');
+      strip.appendChild(link);
+    }
     const st=epState(i), pill=document.createElement('div');
+    if(i===(bookProg.current_ep||0)) curPillEl=pill;
     pill.className='ep-pill '+st;
-    pill.title=st==='future'?'Finish earlier episodes first':st==='lk'?'Daily limit reached':ep.title;
+    pill.title=st==='future'?'Finish earlier episodes first':st==='lk'?'Come back tomorrow':ep.title;
     if(st==='done') {
       // Green check — read
       pill.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
-    } else if(st==='cur') {
-      // Blue — currently reading
-      pill.innerHTML='<span>'+ep.episode_number+'</span>';
-    } else if(st==='available') {
-      // Today's unlocked episodes — show number clearly
-      pill.innerHTML='<span>'+ep.episode_number+'</span>';
     } else if(st==='lk') {
-      // Locked by timer — show number + small lock
-      pill.innerHTML='<span>'+ep.episode_number+'</span>';
-      pill.title='Come back tomorrow';
+      // Locked by daily limit — lock icon
+      pill.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg>';
     } else {
-      // Future — not yet available, just show number dimmed
+      // cur / available / future — show episode number
       pill.innerHTML='<span>'+ep.episode_number+'</span>';
     }
     if(st==='cur'||st==='done'||st==='available') pill.onclick=()=>jumpEp(i);
+    else if(st==='lk') pill.onclick=()=>blockForToday(isTimeDone()?'time':'episodes');
     else pill.style.pointerEvents='none';
     strip.appendChild(pill);
   });
-  strip.children[bookProg.current_ep||0]?.scrollIntoView({block:'nearest',inline:'center'});
+  curPillEl?.scrollIntoView({block:'nearest',inline:'center'});
 }
 function jumpEp(i) {
   const st = epState(i);
   if (st === 'future') return;
-  if (st === 'lk') { showReaderSection('daydone'); startDayTimer(); return; }
+  if (st === 'lk') { blockForToday(isTimeDone()?'time':'episodes'); return; }
   // Only allow jumping to done or cur — not skipping ahead in the window
   if (st === 'available' && i > (bookProg.current_ep || 0) + 0) {
     // Allow clicking the next available ep only if current is done
@@ -1315,26 +1385,87 @@ function renderContent(raw) {
     return '<p>'+fmtMarkers(t)+'</p>';
   }).join('');
 }
-g('readerBody').innerHTML = renderContent(content);
+g('readerContent').innerHTML = renderContent(content);
     g('prevBtn').disabled=i===0;
-    const nst=i+1<activeBook.episodes.length?epState(i+1):null;
-    g('nextBtn').disabled=!nst||nst==='future'||isEpDone();
+    const isLastInBook=i+1>=activeBook.episodes.length;
+    const nextBtn=g('nextBtn');
+    nextBtn.disabled=isLastInBook;
+    // Keep the button live even when the next episode is outside today's
+    // window — clicking it is how readerNext() surfaces the day-complete
+    // popup. A disabled button here would silently eat the click instead.
+    nextBtn.innerHTML=isLastInBook?'The End'
+      :(isDayDone()?'See today\'s progress <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'
+      :'Next episode <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>');
     renderStrip();updateStats();updateTimerChip();
     window.scrollTo(0,0);
   } catch(e){toast('Error loading episode');}
 }
 
-// ── Purchase / Limit Modal ─────────────────────────────────────
+// ── Day-complete celebration / limit popup ─────────────────────
 let limitCountdownTimer = null;
 
+// Dims and disables the reader behind the popup so reading is actually blocked,
+// not just visually covered.
+function lockReaderWrap(on) {
+  const w = g('readerWrap');
+  if (w) w.classList.toggle('locked', !!on);
+}
+
+function fireConfetti() {
+  const card = g('limitCard');
+  if (!card) return;
+  const colors = ['#58cc02','#1cb0f6','#ffc800','#ff4b4b','#ce82ff'];
+  for (let i = 0; i < 26; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti-piece';
+    el.style.left = Math.random()*100+'%';
+    el.style.background = colors[i % colors.length];
+    el.style.animationDelay = (Math.random()*0.3)+'s';
+    el.style.transform = 'rotate('+Math.floor(Math.random()*360)+'deg)';
+    card.appendChild(el);
+    setTimeout(()=>el.remove(), 2200);
+  }
+}
+
+// Shows the popup as-is (used both for the daily-limit case and the mid-window
+// paywall case) — content is filled in by showDayCompleteModal() first.
 function showLimitModal() {
-  document.getElementById('limitModal').classList.add('show');
+  g('limitModal').classList.add('show');
   startLimitCountdown();
+  fireConfetti();
 }
 
 function closeLimitModal() {
-  document.getElementById('limitModal').classList.remove('show');
+  g('limitModal').classList.remove('show');
   if (limitCountdownTimer) clearInterval(limitCountdownTimer);
+}
+
+// The single entry point for "you're capped for today" — fills in today's
+// stats/messaging, dims the reader behind it, and opens the popup.
+// reason: 'time' | 'episodes' | undefined (best-effort guess if omitted —
+// used only when re-showing after an earn action, where the previous
+// messaging is still a reasonable guess)
+function showDayCompleteModal(reason) {
+  const eps = daily?.eps_today || 0;
+  const mins = Math.floor((daily?.secs_watched || 0) / 60);
+  g('limitStatEps').textContent = eps;
+  g('limitStatMins').textContent = mins;
+  const isTime = reason ? reason === 'time' : (isTimeDone() && !isEpDone());
+  if (!isTime) {
+    g('limitBadge').textContent = '🎉';
+    g('limitTitle').textContent = "You finished today's episodes!";
+    g('limitDesc').textContent = "Nice reading streak — come back tomorrow for more, or keep going right now.";
+  } else {
+    g('limitBadge').textContent = '⏰';
+    g('limitTitle').textContent = "That's your hour for today!";
+    g('limitDesc').textContent = "Your timer resets automatically tomorrow, or earn more time now.";
+  }
+  showLimitModal();
+}
+
+function blockForToday(reason) {
+  lockReaderWrap(true);
+  showDayCompleteModal(reason);
 }
 
 function startLimitCountdown() {
@@ -1352,7 +1483,22 @@ function startLimitCountdown() {
     if (el) el.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
   }
   tick();
-  limitCountdownTimer = setInterval(tick, 1000);
+  limitCountdownTimer = setInterval(async () => {
+    tick();
+    const now = new Date();
+    if (now.getHours() === 0 && now.getMinutes() === 0 && now.getSeconds() < 2) {
+      await refreshDaily();
+      if (!isDayDone()) {
+        closeLimitModal();
+        lockReaderWrap(false);
+        showReaderSection('reader');
+        renderStrip(); updateStats(); updateTimerChip();
+        loadEpisode(bookProg.current_ep || 0);
+        startTick();
+        toast('New day! Timer reset.');
+      }
+    }
+  }, 1000);
 }
 
 async function startPurchase() {
@@ -1420,16 +1566,16 @@ async function readerNext() {
       const wc = epData?.word_count || 500;
       const consume = await fetch('/api/purchase/consume',{method:'POST',headers:{'Content-Type':'application/json','x-session-id':sessionId},body:JSON.stringify({bookId:activeBook.id,wordsRead:wc})}).then(r=>r.json()).catch(()=>({active:false}));
       if (!consume.active) {
-        // Paid block exhausted — show normal day done with timer
+        // Paid block exhausted — back to the normal daily cap
         renderStrip(); updateStats(); updateTimerChip();
-        showReaderSection('daydone'); startDayTimer();
+        blockForToday('episodes');
         return;
       }
       // Continue into the paid episode — fall through below
     } else {
-      // No paid unlock — show limit modal
+      // No paid unlock — capped for today (hit the daily episode window)
       renderStrip(); updateStats(); updateTimerChip();
-      showLimitModal();
+      blockForToday('episodes');
       return;
     }
   }
@@ -1443,7 +1589,8 @@ async function readerNext() {
   // Check global daily limits (time + ep count)
   if (isDayDone()) {
     renderStrip(); updateStats(); updateTimerChip();
-    showReaderSection('daydone'); startDayTimer();
+    loadEpisode(next);
+    blockForToday(isTimeDone()?'time':'episodes');
     return;
   }
 
@@ -1458,7 +1605,6 @@ async function readerNext() {
 function readerPrev(){if((bookProg.current_ep||0)>0)loadEpisode((bookProg.current_ep||0)-1);}
 function showReaderSection(n){
   g('adSection').style.display=n==='ad'?'block':'none';
-  g('dayDoneSection').style.display=n==='daydone'?'block':'none';
   g('readerMain').style.display=n==='reader'?'block':'none';
 }
 
@@ -1476,10 +1622,10 @@ function updateStats() {
 }
 function updateTimerChip() {
   const chip=g('timerChip');
-  if(isEpDone()){chip.className='timer-chip lk';chip.textContent=' 6 episodes done';return;}
-  if(isTimeDone()){chip.className='timer-chip lk';chip.textContent=' Time up';return;}
+  if(isEpDone()){chip.className='timer-badge lk';chip.textContent='🔒 Episodes done';return;}
+  if(isTimeDone()){chip.className='timer-badge lk';chip.textContent='🔒 Time up';return;}
   const rem=Math.max(0,eTL()-(daily?.secs_watched||0)),m=Math.floor(rem/60),s=rem%60;
-  chip.className=rem<600?'timer-chip warn':'timer-chip ok';
+  chip.className=rem<600?'timer-badge warn':'timer-badge ok';
   chip.textContent='⏱ '+m+':'+String(s).padStart(2,'0')+' left';
 }
 
@@ -1487,7 +1633,7 @@ function updateTimerChip() {
 function startTick() {
   clearInterval(tickTimer);
   tickTimer=setInterval(async()=>{
-    if(g('adSection').style.display!=='none'||g('dayDoneSection').style.display!=='none')return;
+    if(g('adSection').style.display!=='none'||g('limitModal').classList.contains('show'))return;
     await tick(10); updateStats(); updateTimerChip();
     const hits=daily?.ads_hit||[];
     for(const t of AD_TRIGGERS){
@@ -1500,30 +1646,13 @@ function startTick() {
       }
     }
     if(isDayDone()){clearInterval(tickTimer);renderStrip();
-      // Check paid unlock before showing day-done vs limit modal
+      // Check paid unlock before blocking
       fetch('/api/purchase/status/'+(activeBook?.id||'x'),{headers:{'x-session-id':sessionId}}).then(r=>r.json()).then(s=>{
         if(s.active){/* still has paid words, keep reading */}
-        else{showReaderSection('daydone');startDayTimer();}
-      }).catch(()=>{showReaderSection('daydone');startDayTimer();});
+        else{blockForToday(isTimeDone()?'time':'episodes');}
+      }).catch(()=>{blockForToday(isTimeDone()?'time':'episodes');});
     }
   },10000);
-}
-
-// ── Day done ──────────────────────────────────────────────────
-function startDayTimer(){
-  if(isEpDone()&&!isTimeDone()){g('dayDoneTitle').textContent="You've read 3 episodes today!";g('dayDoneDesc').textContent="Come back tomorrow or earn extra episodes now.";}
-  else{g('dayDoneTitle').textContent="That's your hour for today!";g('dayDoneDesc').textContent="Your timer resets automatically tomorrow, or earn more now.";}
-  clearInterval(dayTimer);updateDayDoneTimer();
-  dayTimer=setInterval(async()=>{
-    updateDayDoneTimer();
-    const now=new Date();
-    if(now.getHours()===0&&now.getMinutes()===0){await refreshDaily();if(!isDayDone()){clearInterval(dayTimer);showReaderSection('reader');renderStrip();updateStats();updateTimerChip();loadEpisode(bookProg.current_ep||0);startTick();toast('New day! Timer reset.');}}
-  },1000);
-}
-function updateDayDoneTimer(){
-  const now=new Date(),mid=new Date(now);mid.setHours(24,0,0,0);
-  const s=Math.floor((mid-now)/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
-  g('dayDoneTimer').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0');
 }
 
 // ── Ad break ──────────────────────────────────────────────────
@@ -1533,7 +1662,6 @@ async function showAd(afterFn) {
   try{const r=await fetch(`${API}/api/ads/random`);if(r.ok)ad=await r.json();}catch(e){}
   console.log('Ad data:', ad);
   g('adName').textContent=(ad&&ad.name&&ad.name.length>1)?ad.name:'Sponsor';
-  g('adDesc').textContent=ad?ad.description||'':'Thank you for reading with Pagebound.';
   const wrap=g('adVideoWrap'),ph=g('adPlaceholder');
   wrap.querySelectorAll('video,img:not(#adPlaceholder img)').forEach(el=>el.remove());
   if(ad&&ad.url&&ad.type==='video'){
@@ -1834,7 +1962,7 @@ async function loadAnalytics(){
         <div class="bar-chart">
           ${last14.map(date=>`<div class="bar-col">
             <div class="bar blue" style="height:${Math.max(4,((visMap[date]||0)/maxVis)*70)}px" title="${visMap[date]||0} visitors on ${date}"></div>
-            <div class="bar-label">${fmtDate(date)}</div>
+            <div class="bar-lbl">${fmtDate(date)}</div>
           </div>`).join('')}
         </div>
       </div>
@@ -1844,7 +1972,7 @@ async function loadAnalytics(){
         <div class="bar-chart">
           ${last14.map(date=>`<div class="bar-col">
             <div class="bar" style="height:${Math.max(4,((readMap[date]||0)/maxRead)*70)}px;background:var(--success-l);border-top:2px solid var(--success)" title="${readMap[date]||0} minutes on ${date}"></div>
-            <div class="bar-label">${fmtDate(date)}</div>
+            <div class="bar-lbl">${fmtDate(date)}</div>
           </div>`).join('')}
         </div>
       </div>
@@ -1884,13 +2012,35 @@ boot();
 </script>
 
 <script>
-// ── Screenshot deterrent ──────────────────────────────────────
+// ── Screenshot / copy deterrent ─────────────────────────────────
+// Reality check: there is no browser API that fires when the OS takes a
+// screenshot (Windows Snipping Tool, macOS Cmd+Shift+3/4/5, phone screenshot
+// gestures all happen below the page and are invisible to JS). Nothing on
+// the web can technically prevent that. What this layer does instead:
+//  1. Blur the text the moment the tab/window loses focus or visibility,
+//     which does catch a lot of real-world "switch app, screenshot, switch
+//     back" flows.
+//  2. Disable the easy copy paths (selection, drag, right-click, Ctrl+P/S/U).
+//  3. Stamp a faint per-session watermark across the text so any copy that
+//     does get out is traceable back to who read it.
 
 function isReading() {
   return document.getElementById('pageReader') &&
          document.getElementById('pageReader').style.display !== 'none' &&
          document.getElementById('readerMain') &&
          document.getElementById('readerMain').style.display !== 'none';
+}
+
+function renderWatermark() {
+  const wm = document.getElementById('readerWatermark');
+  if (!wm || typeof sessionId !== 'string') return;
+  const label = sessionId.slice(0, 8) + ' · ' + new Date().toLocaleDateString();
+  wm.innerHTML = '';
+  for (let i = 0; i < 40; i++) {
+    const s = document.createElement('span');
+    s.textContent = label;
+    wm.appendChild(s);
+  }
 }
 
 function showProtectOverlay() {
@@ -1904,7 +2054,10 @@ function hideProtectOverlay() {
   if (ov) ov.style.display = 'none';
 }
 
-// PrintScreen — blur immediately, wipe clipboard
+// PrintScreen (Windows) — blur immediately, wipe clipboard.
+// Note: many Windows screenshot tools (Snipping Tool, Win+Shift+S) don't
+// dispatch a PrintScreen keyup at all, so this only catches the classic
+// full-screen PrtScn+paste flow, not every capture method.
 document.addEventListener('keyup', e => {
   if (e.key === 'PrintScreen') {
     showProtectOverlay();
@@ -1913,10 +2066,12 @@ document.addEventListener('keyup', e => {
   }
 });
 
-// Block Ctrl+P, Ctrl+S, Ctrl+U
+// Block Ctrl/Cmd+P, S, U, A while reading (leave them alone elsewhere so
+// admin forms and normal browser use aren't broken)
 document.addEventListener('keydown', e => {
   const c = e.ctrlKey || e.metaKey;
-  if (c && ['p','s','u','a'].includes(e.key)) { e.preventDefault(); return false; }
+  if (c && ['p','s','u'].includes(e.key)) { e.preventDefault(); return false; }
+  if (c && e.key === 'a' && isReading()) { e.preventDefault(); return false; }
 });
 
 // Right click on reader = block
@@ -1924,13 +2079,18 @@ document.addEventListener('contextmenu', e => {
   if (isReading()) { e.preventDefault(); return false; }
 });
 
-// Tab switch / screen capture detection
+// Tab switch / minimize
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') showProtectOverlay();
   else setTimeout(hideProtectOverlay, 800);
 });
 
-// Screen capture API override (Chromium)
+// Window loses OS focus without a visibility change (e.g. Alt+Tab/Cmd+Tab to
+// another app while the tab stays "visible") — visibilitychange alone misses this
+window.addEventListener('blur', showProtectOverlay);
+window.addEventListener('focus', () => setTimeout(hideProtectOverlay, 500));
+
+// Screen capture / screen-share API override (Chromium)
 if (navigator.mediaDevices?.getDisplayMedia) {
   const orig = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
   navigator.mediaDevices.getDisplayMedia = async opts => {
