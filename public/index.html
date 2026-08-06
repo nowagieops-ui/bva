@@ -1183,31 +1183,31 @@ async function loadEpisode(i) {
     const data=await r.json();
     bookProg.current_ep=i;
     await saveProgress(activeBook.id, i, bookProg.done_eps||[]);
-    g('readerTitle').textContent='Episode '+ep.episode_number+' — '+ep.title;
+    g('readerTitle').textContent='Episode '+ep.episode_number+' — '+ep.title.replace(/[【】][^】]*[【】]/g,'').replace(/[【】]/g,'').trim();
     g('epCounter').textContent=(i+1)+' / '+activeBook.episodes.length;
     g('progressFill').style.width=(((i+1)/activeBook.episodes.length)*100)+'%';
-    // Render content — supports plain text and marker-formatted EPUB text
+    // Render content — handles plain text and EPUB marker-formatted text
 const content = data.content || '';
-const hasMarkers = content.includes('【');
-function renderContent(raw) {
-  return raw.split(/\n\n+/).filter(p=>p.trim()).map(para=>{
-    const t = para.trim();
-    if(!t) return '';
-    // Heading marker
-    if(t.startsWith('【H】')) {
-      const inner = t.replace(/【H】|【\/H】/g,'').trim();
-      return '<p class="rh">'+escapeAndFormat(inner)+'</p>';
-    }
-    return '<p>'+escapeAndFormat(t)+'</p>';
-  }).join('');
-}
-function escapeAndFormat(t) {
-  // Don't escape — just convert markers to HTML
+function fmtMarkers(t) {
   return t
     .replace(/【B】/g,'<strong>').replace(/【\/B】/g,'</strong>')
     .replace(/【I】/g,'<em>').replace(/【\/I】/g,'</em>')
     .replace(/【U】/g,'<u>').replace(/【\/U】/g,'</u>')
-    .replace(/\n/g,'<br>');
+    .replace(/
+/g,'<br>');
+}
+function renderContent(raw) {
+  return raw.split(/
+
++/).filter(p=>p.trim()).map(para=>{
+    const t = para.trim();
+    if(!t) return '';
+    if(t.startsWith('【H】')) {
+      const inner = t.replace(/【H】|【\/H】/g,'').trim();
+      return '<p class="rh">'+fmtMarkers(inner)+'</p>';
+    }
+    return '<p>'+fmtMarkers(t)+'</p>';
+  }).join('');
 }
 g('readerBody').innerHTML = renderContent(content);
     g('prevBtn').disabled=i===0;
@@ -1400,37 +1400,55 @@ async function readFileAsText(file) {
       let rawHtml='';
       for(const p of[basePath+href,href]){try{rawHtml=await zip.file(p)?.async('text')||'';if(rawHtml)break;}catch{}}
       if(!rawHtml)continue;
-      // Strip style/script completely
-      let cleaned=rawHtml
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'')
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'');
-      // Convert formatting to safe unicode markers BEFORE stripping tags
-      cleaned=cleaned
-        .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi,(_,t)=>'\n\n【H】'+t.replace(/<[^>]+>/g,'').trim()+'【/H】\n\n')
-        .replace(/<(b|strong)[^>]*>/gi,'【B】')
-        .replace(/<\/(b|strong)>/gi,'【/B】')
-        .replace(/<(i|em)[^>]*>/gi,'【I】')
-        .replace(/<\/(i|em)>/gi,'【/I】')
-        .replace(/<u[^>]*>/gi,'【U】')
-        .replace(/<\/u>/gi,'【/U】')
-        .replace(/<br\s*\/?>/gi,'\n')
-        .replace(/<\/p>/gi,'\n\n')
-        .replace(/<p[^>]*>/gi,'')
-        .replace(/<\/div>/gi,'\n')
-        .replace(/<[^>]+>/g,'')
-        .replace(/&nbsp;/g,' ').replace(/&amp;/g,'&')
-        .replace(/&lt;/g,'<').replace(/&gt;/g,'>')
-        .replace(/&quot;/g,'"').replace(/&#39;/g,"'")
-        .replace(/&mdash;/g,'—').replace(/&ndash;/g,'–')
-        .replace(/&ldquo;/g,'“').replace(/&rdquo;/g,'”')
-        .replace(/&lsquo;/g,'‘').replace(/&rsquo;/g,'’')
-        .replace(/&hellip;/g,'…').replace(/&apos;/g,"'")
-        .replace(/&#8220;/g,'“').replace(/&#8221;/g,'”')
-        .replace(/&#8216;/g,'‘').replace(/&#8217;/g,'’')
-        .replace(/&#8212;/g,'—').replace(/&#8211;/g,'–')
-        .replace(/&#160;/g,' ')
-        .replace(/\n{4,}/g,'\n\n\n').trim();
-      if(cleaned) txt+=cleaned+'\n\n';
+      // Parse EPUB HTML to clean text with formatting markers
+      let cleaned = rawHtml
+        // Remove head, style, script entirely
+        .replace(/<head[\s\S]*?<\/head>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+      // Headings → marker on its own line
+      cleaned = cleaned.replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (_, t) => {
+        const text = t.replace(/<[^>]+>/g, '').trim();
+        return text ? '\n\n\u3010H\u3011' + text + '\u3010/H\u3011\n\n' : '';
+      });
+      // Bold
+      cleaned = cleaned
+        .replace(/<(b|strong)[^>]*>/gi, '\u3010B\u3011')
+        .replace(/<\/(b|strong)>/gi, '\u3010/B\u3011');
+      // Italic/em
+      cleaned = cleaned
+        .replace(/<(i|em)[^>]*>/gi, '\u3010I\u3011')
+        .replace(/<\/(i|em)>/gi, '\u3010/I\u3011');
+      // Underline
+      cleaned = cleaned
+        .replace(/<u[^>]*>/gi, '\u3010U\u3011')
+        .replace(/<\/u>/gi, '\u3010/U\u3011');
+      // Paragraphs → double newline
+      cleaned = cleaned
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<p[^>]*>/gi, '')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        // Strip ALL remaining tags
+        .replace(/<[^>]+>/g, '')
+        // Decode entities
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/&mdash;/g, '\u2014').replace(/&ndash;/g, '\u2013')
+        .replace(/&ldquo;/g, '\u201c').replace(/&rdquo;/g, '\u201d')
+        .replace(/&lsquo;/g, '\u2018').replace(/&rsquo;/g, '\u2019')
+        .replace(/&hellip;/g, '\u2026').replace(/&apos;/g, "'")
+        .replace(/&#8220;/g, '\u201c').replace(/&#8221;/g, '\u201d')
+        .replace(/&#8216;/g, '\u2018').replace(/&#8217;/g, '\u2019')
+        .replace(/&#8212;/g, '\u2014').replace(/&#8211;/g, '\u2013')
+        .replace(/&#160;/g, ' ')
+        // Clean markers that ended up empty
+        .replace(/\u3010[BIU]\u3011\s*\u3010\/[BIU]\u3011/g, '')
+        // Collapse excessive blank lines
+        .replace(/\n{4,}/g, '\n\n\n').trim();
+      if (cleaned) txt += cleaned + '\n\n';
     }
     if(!txt.trim())throw new Error('Could not extract text from EPUB. Try converting to .txt using Calibre.');
     return txt;
