@@ -1,4 +1,5 @@
 const express      = require('express');
+const stripe       = require('stripe')(process.env.STRIPE_SECRET_KEY||'');
 const sqlite3      = require('sqlite3').verbose();
 const { open }     = require('sqlite');
 const multer       = require('multer');
@@ -93,6 +94,16 @@ async function initDB() {
       path TEXT,
       created_at INTEGER DEFAULT (strftime('%s','now'))
     );
+    CREATE TABLE IF NOT EXISTS paid_unlocks (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      book_id TEXT NOT NULL,
+      stripe_session_id TEXT UNIQUE,
+      words_unlocked INTEGER DEFAULT 10000,
+      words_used INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
   `);
   console.log('DB ready');
 }
@@ -111,7 +122,41 @@ const adUp    = multer({storage:store('uploads/ads'),   limits:{fileSize:500*102
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
+// Serve uploads with proper headers — video needs range request support
+app.use('/uploads', (req, res, next) => {
+  const filePath = path.join(__dirname, 'uploads', req.path);
+  const ext = path.extname(req.path).toLowerCase();
+  const videoExts = ['.mp4','.mov','.webm','.m4v','.avi'];
+  if (videoExts.includes(ext)) {
+    // Serve video with range support for proper playback
+    if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+    const stat = fs.statSync(filePath);
+    const mimeTypes = {'.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm','.m4v':'video/mp4','.avi':'video/x-msvideo'};
+    const mime = mimeTypes[ext] || 'video/mp4';
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0]);
+      const end = parts[1] ? parseInt(parts[1]) : Math.min(start + 1024*1024*2, stat.size - 1);
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': end - start + 1,
+        'Content-Type': mime,
+      });
+      fs.createReadStream(filePath, {start, end}).pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': stat.size,
+        'Content-Type': mime,
+        'Accept-Ranges': 'bytes',
+      });
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } else {
+    next();
+  }
+}, express.static('uploads'));
 
 // ── Admin guard ───────────────────────────────────────────────
 function admin(req,res,next) {
@@ -365,6 +410,102 @@ app.delete('/api/ads/:id', admin, async (req,res) => {
   if(ad?.file){try{fs.unlinkSync('uploads/ads/'+ad.file);}catch{}}
   await db.run('DELETE FROM ads WHERE id=?',req.params.id);
   res.json({ok:true});
+});
+
+// ── Stripe ────────────────────────────────────────────────────
+// Create checkout session
+app.post('/api/purchase/checkout', async (req,res) => {
+  const sid = req.headers['x-session-id'];
+  const { bookId } = req.body;
+  if (!sid || !bookId) return res.status(400).json({error:'Missing params'});
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({error:'Stripe not configured'});
+  try {
+    const origin = req.headers.origin || `https://${req.headers.host}`;
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: 'Pagebound — Unlock next 10,000 words',
+            description: 'Read on without waiting until tomorrow.',
+          },
+          unit_amount: 99, // $0.99
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      success_url: `${origin}/book/${bookId}?paid=1&cs={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${origin}/book/${bookId}?paid=0`,
+      metadata: { sessionId: sid, bookId },
+    });
+    res.json({ url: session.url });
+  } catch(e) {
+    console.error('Stripe checkout error:', e.message);
+    res.status(500).json({error: e.message});
+  }
+});
+
+// Stripe webhook — confirm payment and activate unlock
+app.post('/api/stripe/webhook',
+  express.raw({type:'application/json'}),
+  async (req,res) => {
+    const sig = req.headers['stripe-signature'];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    let event;
+    try {
+      event = webhookSecret
+        ? stripe.webhooks.constructEvent(req.body, sig, webhookSecret)
+        : JSON.parse(req.body);
+    } catch(e) {
+      console.error('Webhook sig error:', e.message);
+      return res.status(400).send('Webhook Error');
+    }
+    if (event.type === 'checkout.session.completed') {
+      const cs = event.data.object;
+      const { sessionId, bookId } = cs.metadata||{};
+      if (sessionId && bookId) {
+        try {
+          await db.run(
+            `INSERT OR IGNORE INTO paid_unlocks (id,session_id,book_id,stripe_session_id,words_unlocked,words_used,active)
+             VALUES (?,?,?,?,10000,0,1)`,
+            uuid(), sessionId, bookId, cs.id
+          );
+          console.log('Paid unlock created for session', sessionId, 'book', bookId);
+        } catch(e) { console.error('DB unlock error:', e.message); }
+      }
+    }
+    res.json({received:true});
+  }
+);
+
+// Check if session has active paid unlock for a book
+app.get('/api/purchase/status/:bookId', async (req,res) => {
+  const sid = req.headers['x-session-id'];
+  if (!sid) return res.status(400).json({error:'No session'});
+  const unlock = await db.get(
+    'SELECT * FROM paid_unlocks WHERE session_id=? AND book_id=? AND active=1 ORDER BY created_at DESC LIMIT 1',
+    sid, req.params.bookId
+  );
+  res.json({ active: !!unlock, wordsUnlocked: unlock?.words_unlocked||0, wordsUsed: unlock?.words_used||0 });
+});
+
+// Record words consumed from paid unlock (called as reader progresses)
+app.post('/api/purchase/consume', async (req,res) => {
+  const sid = req.headers['x-session-id'];
+  const { bookId, wordsRead } = req.body;
+  const unlock = await db.get(
+    'SELECT * FROM paid_unlocks WHERE session_id=? AND book_id=? AND active=1 ORDER BY created_at DESC LIMIT 1',
+    sid, bookId
+  );
+  if (!unlock) return res.json({active:false});
+  const newUsed = (unlock.words_used||0) + (wordsRead||0);
+  const exhausted = newUsed >= unlock.words_unlocked;
+  await db.run(
+    'UPDATE paid_unlocks SET words_used=?, active=? WHERE id=?',
+    newUsed, exhausted ? 0 : 1, unlock.id
+  );
+  res.json({ active: !exhausted, wordsUsed: newUsed, wordsUnlocked: unlock.words_unlocked });
 });
 
 // ── Admin verify ──────────────────────────────────────────────
