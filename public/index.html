@@ -975,7 +975,7 @@ html,body{
 const API = '';
 const DAILY_LIMIT = 3600;
 const EP_MAX = 6;
-const OPEN_WINDOW = 2; // current ep + 1 ahead only
+const EPISODES_PER_DAY = 3; // episodes unlocked each new day
 const AD_TRIGGERS = [600, 1800, 3600];
 
 // ── State ─────────────────────────────────────────────────────
@@ -1146,21 +1146,36 @@ async function openBook(id) {
 }
 
 // ── Episode strip ─────────────────────────────────────────────
+function getDailyWindow(bookId) {
+  // Each day, 3 episodes unlock from where the reader stopped
+  // Stored in localStorage per book per day
+  const key = 'pb_window_' + bookId + '_' + todayKeyLS();
+  const saved = localStorage.getItem(key);
+  if (saved) return JSON.parse(saved);
+  // First time today — calculate window from last stop
+  const lastEp = bookProg.current_ep || 0;
+  const window = { start: lastEp, end: lastEp + EPISODES_PER_DAY - 1 };
+  localStorage.setItem(key, JSON.stringify(window));
+  return window;
+}
+
+function todayKeyLS() {
+  const d = new Date();
+  return d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate();
+}
+
 function epState(i) {
-  const done=bookProg.done_eps||[], cur=bookProg.current_ep||0;
-  // Done explicitly OR before current episode (implicitly read in past)
-  if(done.includes(i) || i < cur) return 'done';
-  if(i === cur) return 'cur';
-  // Next episode only unlocks if:
-  // 1. It's exactly 1 ahead (OPEN_WINDOW=2 means cur+1 only)
-  // 2. Daily episode limit not reached
-  // 3. Daily time limit not reached
-  const windowEnd = cur + OPEN_WINDOW - 1; // = cur + 1
-  if(i > cur && i <= windowEnd) {
-    if(isDayDone()) return 'lk';
-    if(isEpDone()) return 'lk'; // daily ep limit hit
-    return 'available';
+  const cur = bookProg.current_ep || 0;
+  // Already read (before current)
+  if (i < cur) return 'done';
+  if (i === cur) return 'cur';
+  // Get today's window
+  const win = getDailyWindow(activeBook.id);
+  // Within today's window
+  if (i > cur && i <= win.end) {
+    return isDayDone() ? 'lk' : 'available';
   }
+  // Beyond today's window
   return 'future';
 }
 function renderStrip() {
@@ -1181,10 +1196,17 @@ function renderStrip() {
   strip.children[bookProg.current_ep||0]?.scrollIntoView({block:'nearest',inline:'center'});
 }
 function jumpEp(i) {
-  const st=epState(i);
-  if(st==='future') return; // hard block
-  if(st==='lk'){showReaderSection('daydone');startDayTimer();return;}
-  showReaderSection('reader');loadEpisode(i);
+  const st = epState(i);
+  if (st === 'future') return;
+  if (st === 'lk') { showReaderSection('daydone'); startDayTimer(); return; }
+  // Only allow jumping to done or cur — not skipping ahead in the window
+  if (st === 'available' && i > (bookProg.current_ep || 0) + 0) {
+    // Allow clicking the next available ep only if current is done
+    // i.e. user must read in order within the window too
+    if (i !== (bookProg.current_ep || 0) + 1) return;
+  }
+  showReaderSection('reader');
+  loadEpisode(i);
 }
 
 async function loadEpisode(i) {
@@ -1193,8 +1215,8 @@ async function loadEpisode(i) {
     const r=await fetch(`${API}/api/books/${activeBook.id}/episodes/${ep.episode_number}`);
     if(!r.ok){toast('Could not load episode');return;}
     const data=await r.json();
-    bookProg.current_ep=i;
-    await saveProgress(activeBook.id, i, bookProg.done_eps||[]);
+    bookProg.current_ep = i;
+    await saveProgress(activeBook.id, i, bookProg.done_eps || []);
     g('readerTitle').textContent='Episode '+ep.episode_number+' — '+ep.title.replace(/[【】][^】]*[【】]/g,'').replace(/[【】]/g,'').trim();
     g('epCounter').textContent=(i+1)+' / '+activeBook.episodes.length;
     g('progressFill').style.width=(((i+1)/activeBook.episodes.length)*100)+'%';
@@ -1228,24 +1250,39 @@ g('readerBody').innerHTML = renderContent(content);
 }
 
 async function readerNext() {
-  const next=(bookProg.current_ep||0)+1;
-  if(next>=activeBook.episodes.length)return;
-  const done=bookProg.done_eps||[];
-  if(!done.includes(bookProg.current_ep))done.push(bookProg.current_ep);
-  bookProg.done_eps=done;
-  // Mark episode done and refresh daily state FIRST
-  await markEpDone();
-  await saveProgress(activeBook.id, bookProg.current_ep, done);
-  await refreshDaily(); // refresh so isEpDone/isDayDone reflect new count
-  // Now check if day is done AFTER incrementing
-  if(isDayDone()||isEpDone()){
-    renderStrip();updateStats();updateTimerChip();
-    showReaderSection('daydone');startDayTimer();
+  const next = (bookProg.current_ep || 0) + 1;
+  if (next >= activeBook.episodes.length) return;
+
+  const win = getDailyWindow(activeBook.id);
+
+  // Check if next ep is within today's window
+  if (next > win.end) {
+    // Beyond today's window — day done for this book
+    renderStrip(); updateStats(); updateTimerChip();
+    showReaderSection('daydone'); startDayTimer();
     return;
   }
+
+  // Save progress — move current forward
+  bookProg.current_ep = next;
+  await saveProgress(activeBook.id, next, bookProg.done_eps || []);
+  await markEpDone();
+  await refreshDaily();
+
+  // Check global daily limits (time + ep count)
+  if (isDayDone()) {
+    renderStrip(); updateStats(); updateTimerChip();
+    showReaderSection('daydone'); startDayTimer();
+    return;
+  }
+
   showReaderSection('ad');
-  g('adContext').textContent='Episode break';
-  showAd(async()=>{showReaderSection('reader');await loadEpisode(next);startTick();});
+  g('adContext').textContent = 'Episode break';
+  showAd(async () => {
+    showReaderSection('reader');
+    await loadEpisode(next);
+    startTick();
+  });
 }
 function readerPrev(){if((bookProg.current_ep||0)>0)loadEpisode((bookProg.current_ep||0)-1);}
 function showReaderSection(n){
