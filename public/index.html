@@ -1138,7 +1138,9 @@ async function openBook(id) {
     showPage('pageReader');
     renderStrip();
     updateStats(); updateTimerChip();
-    if(isDayDone()){showReaderSection('daydone');startDayTimer();}
+    // Re-render strip after stats update so lock states are correct
+    renderStrip();
+    if(isDayDone()||isEpDone()){showReaderSection('daydone');startDayTimer();}
     else{showReaderSection('reader');loadEpisode(bookProg.current_ep||0);startTick();}
   } catch(e){toast('Error loading book');}
 }
@@ -1146,12 +1148,19 @@ async function openBook(id) {
 // ── Episode strip ─────────────────────────────────────────────
 function epState(i) {
   const done=bookProg.done_eps||[], cur=bookProg.current_ep||0;
-  // Done explicitly OR before current (implicitly read)
+  // Done explicitly OR before current episode (implicitly read in past)
   if(done.includes(i) || i < cur) return 'done';
   if(i === cur) return 'cur';
-  // Only unlock OPEN_WINDOW-1 episodes ahead of current
-  const windowEnd = cur + OPEN_WINDOW - 1;
-  if(i > cur && i <= windowEnd) return isDayDone() ? 'lk' : 'available';
+  // Next episode only unlocks if:
+  // 1. It's exactly 1 ahead (OPEN_WINDOW=2 means cur+1 only)
+  // 2. Daily episode limit not reached
+  // 3. Daily time limit not reached
+  const windowEnd = cur + OPEN_WINDOW - 1; // = cur + 1
+  if(i > cur && i <= windowEnd) {
+    if(isDayDone()) return 'lk';
+    if(isEpDone()) return 'lk'; // daily ep limit hit
+    return 'available';
+  }
   return 'future';
 }
 function renderStrip() {
@@ -1224,10 +1233,16 @@ async function readerNext() {
   const done=bookProg.done_eps||[];
   if(!done.includes(bookProg.current_ep))done.push(bookProg.current_ep);
   bookProg.done_eps=done;
+  // Mark episode done and refresh daily state FIRST
   await markEpDone();
   await saveProgress(activeBook.id, bookProg.current_ep, done);
-  if(epState(next)==='future')return;
-  if(isDayDone()){showReaderSection('daydone');startDayTimer();renderStrip();updateStats();return;}
+  await refreshDaily(); // refresh so isEpDone/isDayDone reflect new count
+  // Now check if day is done AFTER incrementing
+  if(isDayDone()||isEpDone()){
+    renderStrip();updateStats();updateTimerChip();
+    showReaderSection('daydone');startDayTimer();
+    return;
+  }
   showReaderSection('ad');
   g('adContext').textContent='Episode break';
   showAd(async()=>{showReaderSection('reader');await loadEpisode(next);startTick();});
