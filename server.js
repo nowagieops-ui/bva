@@ -12,7 +12,12 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
 
 // ── Dirs ──────────────────────────────────────────────────────
-['uploads/books','uploads/covers','uploads/ads','db'].forEach(d => fs.mkdirSync(d,{recursive:true}));
+// Ensure all required directories exist
+const REQUIRED_DIRS = ['uploads/books','uploads/covers','uploads/ads','db'];
+REQUIRED_DIRS.forEach(d => {
+  try { fs.mkdirSync(d, {recursive:true}); }
+  catch(e) { console.error('Could not create dir', d, e.message); }
+});
 
 // ── DB ────────────────────────────────────────────────────────
 let db;
@@ -363,6 +368,9 @@ app.delete('/api/ads/:id', admin, async (req,res) => {
 });
 
 // ── Admin verify ──────────────────────────────────────────────
+// Health check — always returns 200 so you know server is up
+app.get('/api/health', (_,res) => res.json({ok:true, time:new Date().toISOString()}));
+
 app.post('/api/admin/verify', (req,res) => {
   res.json(req.body.password===ADMIN_PASS?{ok:true}:{error:'Wrong password'});
 });
@@ -448,4 +456,10 @@ process.on('unhandledRejection', (reason) => {
   console.error('Unhandled rejection:', reason);
 });
 
-initDB().then(() => app.listen(PORT, () => console.log(`Pagebound on port ${PORT}`)));
+initDB().then(() => {
+  app.listen(PORT, () => console.log(`Pagebound running on port ${PORT}`));
+}).catch(err => {
+  console.error('DB init failed:', err.message);
+  // Start server anyway so it returns errors instead of being blank
+  app.listen(PORT, () => console.log(`Pagebound started WITHOUT DB on port ${PORT}`));
+});
