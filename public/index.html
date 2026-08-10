@@ -2028,9 +2028,32 @@ async function readFileAsText(file) {
   if(['docx','doc'].includes(ext)||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document'){
     if(!window.mammoth){await new Promise(r=>setTimeout(r,1000)); if(!window.mammoth)throw new Error('DOCX support failed to load. Please refresh the page and try again.');}
     const buf=await file.arrayBuffer();
-    const result=await window.mammoth.extractRawText({arrayBuffer:buf});
-    if(!result.value.trim())throw new Error('Could not extract text from DOCX.');
-    return result.value;
+    const result=await window.mammoth.convertToHtml({arrayBuffer:buf});
+    let html=result.value||'';
+    html = html
+      .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (_, t) => '\n\n【H】' + t.replace(/<[^>]+>/g,'').trim() + '【/H】\n\n')
+      .replace(/<(b|strong)[^>]*>/gi, '【B】').replace(/<\/(b|strong)>/gi, '【/B】')
+      .replace(/<(i|em)[^>]*>/gi, '【I】').replace(/<\/(i|em)>/gi, '【/I】')
+      .replace(/<u[^>]*>/gi, '【U】').replace(/<\/(u)>/gi, '【/U】')
+      .replace(/<br\s*\/?>(?!\n)/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n').replace(/<p[^>]*>/gi, '')
+      .replace(/<\/div>/gi, '\n').replace(/<li[^>]*>/gi, '\n').replace(/<\/li>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/&mdash;/g, '—').replace(/&ndash;/g, '–')
+      .replace(/&ldquo;/g, '“').replace(/&rdquo;/g, '”')
+      .replace(/&lsquo;/g, '‘').replace(/&rsquo;/g, '’')
+      .replace(/&hellip;/g, '…').replace(/&apos;/g, "'")
+      .replace(/&#8220;/g, '“').replace(/&#8221;/g, '”')
+      .replace(/&#8216;/g, '‘').replace(/&#8217;/g, '’')
+      .replace(/&#8212;/g, '—').replace(/&#8211;/g, '–')
+      .replace(/&#160;/g, ' ')
+      .replace(/【[BIU]】\s*【\/[BIU]】/g, '')
+      .replace(/\n{4,}/g, '\n\n\n')
+      .trim();
+    if(!html)throw new Error('Could not extract text from DOCX.');
+    return html;
   }
   if(ext==='rtf'){
     const txt=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Read failed'));r.readAsText(file,'utf-8');});
@@ -2076,13 +2099,17 @@ async function loadAdminBooks(){
   try{
     const r=await fetch(`${API}/api/books`);const books=await r.json();
     g('bookCountBadge').textContent=books.length+' book'+(books.length!==1?'s':'');
-    g('adminBookList').innerHTML=books.length?books.map((b,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${b.title}</p><span>${b.author||''} · ${b.total_episodes} episodes</span></div><button class="del-btn" onclick="deleteBook('${b.id}')"></button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No books yet.</p>';
+    g('adminBookList').innerHTML=books.length?books.map((b,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${b.title}</p><span>${b.author||''} · ${b.total_episodes} episodes</span></div><button class="del-btn" onclick="deleteBook('${b.id}')">Delete</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No books yet.</p>';
   }catch(e){}
 }
 async function deleteBook(id){
-  if(!confirm('Remove this book?'))return;
-  await fetch(`${API}/api/books/${id}`,{method:'DELETE',headers:{'x-admin-pass':adminPass}});
-  loadAdminBooks();toast('Book removed');
+  if(!confirm('Are you sure you want to delete this book?'))return;
+  const r = await fetch(`${API}/api/books/${id}`,{method:'DELETE',headers:{'x-admin-pass':adminPass}});
+  if (r.ok) {
+    loadAdminBooks();toast('Book deleted');
+  } else {
+    toast('Could not delete book');
+  }
 }
 
 // ── Admin — Ads ───────────────────────────────────────────────
