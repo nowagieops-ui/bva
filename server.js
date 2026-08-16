@@ -1,9 +1,8 @@
 const express      = require('express');
 const stripe       = require('stripe')(process.env.STRIPE_SECRET_KEY||'');
-const mysql        = require('mysql2/promise');
+const sqlite3      = require('sqlite3').verbose();
+const { open }     = require('sqlite');
 const multer       = require('multer');
-const cloudinary   = require('cloudinary').v2;
-const { Readable } = require('stream');
 const cors         = require('cors');
 const { v4: uuid } = require('uuid');
 const path         = require('path');
@@ -13,161 +12,151 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
 
-// ── Cloudinary ────────────────────────────────────────────────
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+// ── Dirs ──────────────────────────────────────────────────────
+// Ensure all required directories exist
+const REQUIRED_DIRS = ['uploads/books','uploads/covers','uploads/ads','db'];
+REQUIRED_DIRS.forEach(d => {
+  try { fs.mkdirSync(d, {recursive:true}); }
+  catch(e) { console.error('Could not create dir', d, e.message); }
 });
-
-async function uploadToCloudinary(buffer, filename, folder, resourceType='auto') {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: `pagebound/${folder}`, public_id: filename, resource_type: resourceType, overwrite: true },
-      (err, result) => err ? reject(err) : resolve(result)
-    );
-    Readable.from(buffer).pipe(stream);
-  });
-}
-
-async function deleteFromCloudinary(publicId, resourceType='image') {
-  try { await cloudinary.uploader.destroy(publicId, {resource_type: resourceType}); } catch(e) {}
-}
 
 // ── DB ────────────────────────────────────────────────────────
 let db;
 async function initDB() {
-  db = await mysql.createPool({
-    host:     process.env.DB_HOST     || 'localhost',
-    user:     process.env.DB_USER     || 'root',
-    password: process.env.DB_PASS     || '',
-    database: process.env.DB_NAME     || 'pagebound',
-    waitForConnections: true,
-    connectionLimit: 10,
-    charset: 'utf8mb4',
-  });
-
-  db.get = async (sql, ...args) => {
-    const [rows] = await db.execute(sql, args.flat());
-    return rows[0] || null;
-  };
-  db.all = async (sql, ...args) => {
-    const [rows] = await db.execute(sql, args.flat());
-    return rows;
-  };
-  db.run = async (sql, ...args) => {
-    const [result] = await db.execute(sql, args.flat());
-    return result;
-  };
-
-  await db.run(`CREATE TABLE IF NOT EXISTS books (
-    id VARCHAR(36) PRIMARY KEY,
-    title TEXT NOT NULL,
-    author TEXT,
-    cover_url TEXT,
-    cover_public_id TEXT,
-    words_per_episode INT DEFAULT 2000,
-    total_episodes INT DEFAULT 0,
-    created_at INT DEFAULT (UNIX_TIMESTAMP())
-  ) CHARACTER SET utf8mb4`);
-
-  await db.run(`CREATE TABLE IF NOT EXISTS book_episodes (
-    id VARCHAR(36) PRIMARY KEY,
-    book_id VARCHAR(36) NOT NULL,
-    episode_number INT NOT NULL,
-    title TEXT,
-    content MEDIUMTEXT NOT NULL,
-    word_count INT,
-    INDEX idx_book_ep (book_id, episode_number)
-  ) CHARACTER SET utf8mb4`);
-
-  await db.run(`CREATE TABLE IF NOT EXISTS ads (
-    id VARCHAR(36) PRIMARY KEY,
-    name TEXT NOT NULL,
-    url TEXT NOT NULL,
-    public_id TEXT,
-    type VARCHAR(20) NOT NULL,
-    active TINYINT DEFAULT 1,
-    created_at INT DEFAULT (UNIX_TIMESTAMP())
-  ) CHARACTER SET utf8mb4`);
-
-  await db.run(`CREATE TABLE IF NOT EXISTS sessions (
-    id VARCHAR(36) PRIMARY KEY,
-    ip VARCHAR(100),
-    user_agent TEXT,
-    country VARCHAR(10),
-    first_seen INT DEFAULT (UNIX_TIMESTAMP()),
-    last_seen INT DEFAULT (UNIX_TIMESTAMP()),
-    total_visits INT DEFAULT 1
-  ) CHARACTER SET utf8mb4`);
-
-  await db.run(`CREATE TABLE IF NOT EXISTS daily_state (
-    id VARCHAR(36) PRIMARY KEY,
-    session_id VARCHAR(36) NOT NULL,
-    date VARCHAR(10) NOT NULL,
-    secs_watched INT DEFAULT 0,
-    bonus_secs INT DEFAULT 0,
-    eps_today INT DEFAULT 0,
-    bonus_eps INT DEFAULT 0,
-    ads_hit TEXT DEFAULT '[]',
-    UNIQUE KEY uq_sess_date (session_id, date)
-  ) CHARACTER SET utf8mb4`);
-
-  await db.run(`CREATE TABLE IF NOT EXISTS reading_events (
-    id VARCHAR(36) PRIMARY KEY,
-    session_id VARCHAR(36) NOT NULL,
-    book_id VARCHAR(36) NOT NULL,
-    episode_number INT NOT NULL,
-    secs_read INT DEFAULT 0,
-    date VARCHAR(10) NOT NULL,
-    created_at INT DEFAULT (UNIX_TIMESTAMP()),
-    INDEX idx_re_sess (session_id),
-    INDEX idx_re_book (book_id),
-    INDEX idx_re_date (date)
-  ) CHARACTER SET utf8mb4`);
-
-  await db.run(`CREATE TABLE IF NOT EXISTS watch_progress (
-    id VARCHAR(36) PRIMARY KEY,
-    session_id VARCHAR(36) NOT NULL,
-    content_id VARCHAR(36) NOT NULL,
-    current_ep INT DEFAULT 0,
-    done_eps TEXT DEFAULT '[]',
-    UNIQUE KEY uq_sess_content (session_id, content_id)
-  ) CHARACTER SET utf8mb4`);
-
-  await db.run(`CREATE TABLE IF NOT EXISTS page_views (
-    id VARCHAR(36) PRIMARY KEY,
-    session_id VARCHAR(36) NOT NULL,
-    path TEXT,
-    created_at INT DEFAULT (UNIX_TIMESTAMP()),
-    INDEX idx_pv_sess (session_id),
-    INDEX idx_pv_created (created_at)
-  ) CHARACTER SET utf8mb4`);
-
-  await db.run(`CREATE TABLE IF NOT EXISTS paid_unlocks (
-    id VARCHAR(36) PRIMARY KEY,
-    session_id VARCHAR(36) NOT NULL,
-    book_id VARCHAR(36) NOT NULL,
-    stripe_session_id VARCHAR(200),
-    words_unlocked INT DEFAULT 10000,
-    words_used INT DEFAULT 0,
-    active TINYINT DEFAULT 1,
-    created_at INT DEFAULT (UNIX_TIMESTAMP()),
-    UNIQUE KEY uq_stripe_sess (stripe_session_id)
-  ) CHARACTER SET utf8mb4`);
-
-  console.log('MySQL DB ready');
+  db = await open({ filename:'db/pagebound.db', driver:sqlite3.Database });
+  await db.exec('PRAGMA journal_mode=WAL');
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS books (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      author TEXT,
+      cover_file TEXT,
+      words_per_episode INTEGER DEFAULT 2000,
+      total_episodes INTEGER DEFAULT 0,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+    CREATE TABLE IF NOT EXISTS book_episodes (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      episode_number INTEGER NOT NULL,
+      title TEXT,
+      content TEXT NOT NULL,
+      word_count INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS ads (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      file TEXT NOT NULL,
+      type TEXT NOT NULL,
+      active INTEGER DEFAULT 1,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      ip TEXT,
+      user_agent TEXT,
+      country TEXT,
+      first_seen INTEGER DEFAULT (strftime('%s','now')),
+      last_seen INTEGER DEFAULT (strftime('%s','now')),
+      total_visits INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS daily_state (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      secs_watched INTEGER DEFAULT 0,
+      bonus_secs INTEGER DEFAULT 0,
+      eps_today INTEGER DEFAULT 0,
+      bonus_eps INTEGER DEFAULT 0,
+      ads_hit TEXT DEFAULT '[]',
+      UNIQUE(session_id, date)
+    );
+    CREATE TABLE IF NOT EXISTS reading_events (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      book_id TEXT NOT NULL,
+      episode_number INTEGER NOT NULL,
+      secs_read INTEGER DEFAULT 0,
+      date TEXT NOT NULL,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+    CREATE TABLE IF NOT EXISTS watch_progress (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      content_id TEXT NOT NULL,
+      current_ep INTEGER DEFAULT 0,
+      done_eps TEXT DEFAULT '[]',
+      UNIQUE(session_id, content_id)
+    );
+    CREATE TABLE IF NOT EXISTS page_views (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      path TEXT,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+    CREATE TABLE IF NOT EXISTS paid_unlocks (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      book_id TEXT NOT NULL,
+      stripe_session_id TEXT UNIQUE,
+      words_unlocked INTEGER DEFAULT 10000,
+      words_used INTEGER DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at INTEGER DEFAULT (strftime('%s','now'))
+    );
+  `);
+  console.log('DB ready');
 }
 
-// ── Multer (memory storage — files go to Cloudinary not disk) ─
-const memUpload = (limit) => multer({ storage: multer.memoryStorage(), limits: { fileSize: limit } });
-const bookUp  = memUpload(50*1024*1024);
-const coverUp = memUpload(5*1024*1024);
-const adUp    = memUpload(500*1024*1024);
+// ── Multer ────────────────────────────────────────────────────
+function store(dest) {
+  return multer.diskStorage({
+    destination: (_,__,cb) => cb(null,dest),
+    filename:    (_,file,cb) => cb(null,uuid()+path.extname(file.originalname))
+  });
+}
+const bookUp  = multer({storage:store('uploads/books'), limits:{fileSize:50*1024*1024}});
+const coverUp = multer({storage:store('uploads/covers'),limits:{fileSize:5*1024*1024}});
+const adUp    = multer({storage:store('uploads/ads'),   limits:{fileSize:500*1024*1024}});
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
+// Serve uploads with proper headers — video needs range request support
+app.use('/uploads', (req, res, next) => {
+  const filePath = path.join(__dirname, 'uploads', req.path);
+  const ext = path.extname(req.path).toLowerCase();
+  const videoExts = ['.mp4','.mov','.webm','.m4v','.avi'];
+  if (videoExts.includes(ext)) {
+    // Serve video with range support for proper playback
+    if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+    const stat = fs.statSync(filePath);
+    const mimeTypes = {'.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm','.m4v':'video/mp4','.avi':'video/x-msvideo'};
+    const mime = mimeTypes[ext] || 'video/mp4';
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0]);
+      const end = parts[1] ? parseInt(parts[1]) : Math.min(start + 1024*1024*2, stat.size - 1);
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': end - start + 1,
+        'Content-Type': mime,
+      });
+      fs.createReadStream(filePath, {start, end}).pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': stat.size,
+        'Content-Type': mime,
+        'Accept-Ranges': 'bytes',
+      });
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } else {
+    next();
+  }
+}, express.static('uploads'));
 
 // ── Admin guard ───────────────────────────────────────────────
 function admin(req,res,next) {
@@ -178,7 +167,6 @@ function admin(req,res,next) {
 // ── Helpers ───────────────────────────────────────────────────
 function today() { return new Date().toISOString().split('T')[0]; }
 function getIP(req) { return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown'; }
-function unixNow() { return Math.floor(Date.now()/1000); }
 
 // ── Session ───────────────────────────────────────────────────
 app.post('/api/session', async (req,res) => {
@@ -188,14 +176,15 @@ app.post('/api/session', async (req,res) => {
   if (sessionId) {
     const s = await db.get('SELECT id FROM sessions WHERE id=?', sessionId);
     if (s) {
-      await db.run('UPDATE sessions SET last_seen=?, total_visits=total_visits+1 WHERE id=?', unixNow(), sessionId);
-      await db.run('INSERT INTO page_views (id,session_id,path,created_at) VALUES (?,?,?,?)', uuid(), sessionId, req.body.path||'/', unixNow());
+      await db.run('UPDATE sessions SET last_seen=strftime(\'%s\',\'now\'), total_visits=total_visits+1 WHERE id=?', sessionId);
+      // Log page view
+      await db.run('INSERT INTO page_views (id,session_id,path) VALUES (?,?,?)', uuid(), sessionId, req.body.path||'/');
       return res.json({sessionId:s.id});
     }
   }
   const id = uuid();
-  await db.run('INSERT INTO sessions (id,ip,user_agent,first_seen,last_seen) VALUES (?,?,?,?,?)', id, ip, ua, unixNow(), unixNow());
-  await db.run('INSERT INTO page_views (id,session_id,path,created_at) VALUES (?,?,?,?)', uuid(), id, req.body.path||'/', unixNow());
+  await db.run('INSERT INTO sessions (id,ip,user_agent) VALUES (?,?,?)', id, ip, ua);
+  await db.run('INSERT INTO page_views (id,session_id,path) VALUES (?,?,?)', uuid(), id, req.body.path||'/');
   res.json({sessionId:id});
 });
 
@@ -204,9 +193,9 @@ async function getOrCreateDaily(sessionId) {
   const t = today();
   let s = await db.get('SELECT * FROM daily_state WHERE session_id=? AND date=?', sessionId, t);
   if (!s) {
-    const id = uuid();
-    try { await db.run('INSERT INTO daily_state (id,session_id,date) VALUES (?,?,?)', id, sessionId, t); } catch(e) {}
-    s = await db.get('SELECT * FROM daily_state WHERE session_id=? AND date=?', sessionId, t);
+    const id=uuid();
+    await db.run('INSERT INTO daily_state (id,session_id,date) VALUES (?,?,?)', id, sessionId, t);
+    s = await db.get('SELECT * FROM daily_state WHERE id=?', id);
   }
   return s;
 }
@@ -223,10 +212,11 @@ app.post('/api/daily/tick', async (req,res) => {
   const {delta=10, bookId, episodeNumber} = req.body;
   const s = await getOrCreateDaily(sid);
   await db.run('UPDATE daily_state SET secs_watched=? WHERE session_id=? AND date=?', (s.secs_watched||0)+delta, sid, today());
+  // Track reading event for analytics
   if (bookId) {
     const existing = await db.get('SELECT id FROM reading_events WHERE session_id=? AND book_id=? AND episode_number=? AND date=?', sid, bookId, episodeNumber||0, today());
     if (existing) await db.run('UPDATE reading_events SET secs_read=secs_read+? WHERE id=?', delta, existing.id);
-    else await db.run('INSERT INTO reading_events (id,session_id,book_id,episode_number,secs_read,date,created_at) VALUES (?,?,?,?,?,?,?)', uuid(), sid, bookId, episodeNumber||0, delta, today(), unixNow());
+    else await db.run('INSERT INTO reading_events (id,session_id,book_id,episode_number,secs_read,date) VALUES (?,?,?,?,?,?)', uuid(), sid, bookId, episodeNumber||0, delta, today());
   }
   res.json({ok:true});
 });
@@ -246,11 +236,13 @@ app.post('/api/daily/episode-done', async (req,res) => {
   res.json({ok:true});
 });
 
+const MAX_BONUS_EPS = 2; // caps the daily episode total at 3 base + 2 earned = 5
 app.post('/api/daily/earn', async (req,res) => {
   const sid=req.headers['x-session-id'],{action}=req.body;
   const te={ad:900,share:1800,both:2700},ee={ad:0,share:1,both:2};
   const s=await getOrCreateDaily(sid);
-  await db.run('UPDATE daily_state SET bonus_secs=?,bonus_eps=? WHERE session_id=? AND date=?',(s.bonus_secs||0)+(te[action]||0),(s.bonus_eps||0)+(ee[action]||0),sid,today());
+  const newBonusEps=Math.min((s.bonus_eps||0)+(ee[action]||0), MAX_BONUS_EPS);
+  await db.run('UPDATE daily_state SET bonus_secs=?,bonus_eps=? WHERE session_id=? AND date=?',(s.bonus_secs||0)+(te[action]||0),newBonusEps,sid,today());
   res.json({ok:true});
 });
 
@@ -258,18 +250,14 @@ app.post('/api/daily/earn', async (req,res) => {
 app.get('/api/progress/:contentId', async (req,res) => {
   const sid=req.headers['x-session-id'];
   let p=await db.get('SELECT * FROM watch_progress WHERE session_id=? AND content_id=?',sid,req.params.contentId);
-  if(!p){
-    try { await db.run('INSERT INTO watch_progress (id,session_id,content_id) VALUES (?,?,?)',uuid(),sid,req.params.contentId); } catch(e){}
-    p=await db.get('SELECT * FROM watch_progress WHERE session_id=? AND content_id=?',sid,req.params.contentId);
-  }
+  if(!p){const id=uuid();await db.run('INSERT INTO watch_progress (id,session_id,content_id) VALUES (?,?,?)',id,sid,req.params.contentId);p=await db.get('SELECT * FROM watch_progress WHERE id=?',id);}
   res.json({...p,done_eps:JSON.parse(p.done_eps||'[]')});
 });
 
 app.post('/api/progress/:contentId', async (req,res) => {
   const sid=req.headers['x-session-id'],{currentEp,doneEps}=req.body;
-  await db.run(
-    `INSERT INTO watch_progress (id,session_id,content_id,current_ep,done_eps) VALUES (?,?,?,?,?)
-     ON DUPLICATE KEY UPDATE current_ep=VALUES(current_ep), done_eps=VALUES(done_eps)`,
+  await db.run(`INSERT INTO watch_progress (id,session_id,content_id,current_ep,done_eps) VALUES (?,?,?,?,?)
+    ON CONFLICT(session_id,content_id) DO UPDATE SET current_ep=excluded.current_ep,done_eps=excluded.done_eps`,
     uuid(),sid,req.params.contentId,currentEp,JSON.stringify(doneEps||[]));
   res.json({ok:true});
 });
@@ -277,6 +265,7 @@ app.post('/api/progress/:contentId', async (req,res) => {
 // ── Books ─────────────────────────────────────────────────────
 function parseBook(text,wpe){
   try {
+    // Limit to 5MB of text to prevent memory issues
     if(text.length>5*1024*1024) text=text.slice(0,5*1024*1024);
     const cleaned=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n{4,}/g,'\n\n\n').trim();
     const paras=cleaned.split(/\n\n+/).map(p=>p.trim()).filter(Boolean);
@@ -289,7 +278,10 @@ function parseBook(text,wpe){
     if(cur.length)eps.push(makeEp(n,cur));
     if(eps.length===0) throw new Error('No content found in file');
     return eps;
-  } catch(e) { console.error('parseBook error:',e.message); throw e; }
+  } catch(e) {
+    console.error('parseBook error:',e.message);
+    throw e;
+  }
 }
 function makeEp(n,paras){
   try {
@@ -303,7 +295,9 @@ function makeEp(n,paras){
       }
     }
     return{n,title:title||'Episode '+n,content,wordCount:content.split(/\s+/).length};
-  } catch(e) { return{n,title:'Episode '+n,content:paras.join('\n\n'),wordCount:0}; }
+  } catch(e) {
+    return{n,title:'Episode '+n,content:paras.join('\n\n'),wordCount:0};
+  }
 }
 
 app.post('/api/books/upload', admin, (req,res,next)=>{
@@ -312,21 +306,32 @@ app.post('/api/books/upload', admin, (req,res,next)=>{
     next();
   });
 }, async (req,res) => {
+  const filePath = req.file?.path;
   try{
     const {title,author,wordsPerEpisode=2000}=req.body;
-    if(!req.file||!title) return res.status(400).json({error:'Missing file or title'});
-
+    if(!req.file||!title){
+      if(filePath) try{fs.unlinkSync(filePath);}catch{}
+      return res.status(400).json({error:'Missing file or title'});
+    }
+    // Read file safely
     let text;
-    try{ text=req.file.buffer.toString('utf8'); }
-    catch(e){ text=req.file.buffer.toString('latin1'); }
+    try{
+      text=fs.readFileSync(filePath,'utf8');
+    }catch(e){
+      try{text=fs.readFileSync(filePath,'latin1');}catch(e2){
+        return res.status(400).json({error:'Could not read file — try saving as UTF-8 text'});
+      }
+    }
+    try{fs.unlinkSync(filePath);}catch{}
 
     const wpe=Math.max(500,Math.min(5000,parseInt(wordsPerEpisode)||2000));
     const eps=parseBook(text,wpe);
     const id=uuid();
 
-    await db.run('INSERT INTO books (id,title,author,words_per_episode,total_episodes,created_at) VALUES (?,?,?,?,?,?)',
-      id,title,author||'',wpe,eps.length,unixNow());
+    await db.run('INSERT INTO books (id,title,author,words_per_episode,total_episodes) VALUES (?,?,?,?,?)',
+      id,title,author||'',wpe,eps.length);
 
+    // Insert episodes in batches to avoid timeouts on large books
     const BATCH=20;
     for(let i=0;i<eps.length;i+=BATCH){
       const batch=eps.slice(i,i+BATCH);
@@ -338,38 +343,26 @@ app.post('/api/books/upload', admin, (req,res,next)=>{
     res.json({bookId:id,title,totalEpisodes:eps.length});
   }catch(e){
     console.error('Book upload error:',e);
+    if(filePath) try{fs.unlinkSync(filePath);}catch{}
     res.status(500).json({error:e.message||'Upload failed'});
   }
 });
 
-app.post('/api/books/:id/cover', admin, (req,res,next)=>{
-  coverUp.single('cover')(req,res,err=>{
-    if(err) return res.status(400).json({error:err.message||'Upload failed'});
-    next();
-  });
-}, async (req,res) => {
-  try {
-    const book = await db.get('SELECT * FROM books WHERE id=?', req.params.id);
-    // Delete old cover from Cloudinary if exists
-    if(book?.cover_public_id) await deleteFromCloudinary(book.cover_public_id, 'image');
-
-    const publicId = `cover_${req.params.id}`;
-    const result = await uploadToCloudinary(req.file.buffer, publicId, 'covers', 'image');
-    await db.run('UPDATE books SET cover_url=?, cover_public_id=? WHERE id=?', result.secure_url, result.public_id, req.params.id);
-    res.json({coverUrl: result.secure_url});
-  } catch(e) { res.status(500).json({error:e.message}); }
+app.post('/api/books/:id/cover', admin, coverUp.single('cover'), async (req,res) => {
+  await db.run('UPDATE books SET cover_file=? WHERE id=?',req.file.filename,req.params.id);
+  res.json({coverUrl:'/uploads/covers/'+req.file.filename});
 });
 
 app.get('/api/books', async (_,res) => {
   const books=await db.all('SELECT * FROM books ORDER BY created_at DESC');
-  res.json(books.map(b=>({...b,coverUrl:b.cover_url||null})));
+  res.json(books.map(b=>({...b,coverUrl:b.cover_file?'/uploads/covers/'+b.cover_file:null})));
 });
 
 app.get('/api/books/:id', async (req,res) => {
   const b=await db.get('SELECT * FROM books WHERE id=?',req.params.id);
   if(!b) return res.status(404).json({error:'Not found'});
   const eps=await db.all('SELECT id,episode_number,title,word_count FROM book_episodes WHERE book_id=? ORDER BY episode_number',req.params.id);
-  res.json({...b,coverUrl:b.cover_url||null,episodes:eps});
+  res.json({...b,coverUrl:b.cover_file?'/uploads/covers/'+b.cover_file:null,episodes:eps});
 });
 
 app.get('/api/books/:id/episodes/:num', async (req,res) => {
@@ -380,7 +373,7 @@ app.get('/api/books/:id/episodes/:num', async (req,res) => {
 
 app.delete('/api/books/:id', admin, async (req,res) => {
   const b=await db.get('SELECT * FROM books WHERE id=?',req.params.id);
-  if(b?.cover_public_id) await deleteFromCloudinary(b.cover_public_id, 'image');
+  if(b?.cover_file){try{fs.unlinkSync('uploads/covers/'+b.cover_file);}catch{}}
   await db.run('DELETE FROM book_episodes WHERE book_id=?',req.params.id);
   await db.run('DELETE FROM books WHERE id=?',req.params.id);
   res.json({ok:true});
@@ -398,34 +391,31 @@ app.post('/api/ads', admin, (req,res,next) => {
 }, async (req,res) => {
   try {
     if(!req.file) return res.status(400).json({error:'No file received'});
-    const isVideo = req.file.mimetype.startsWith('video');
-    const type = isVideo ? 'video' : 'image';
-    const id = uuid();
-    const publicId = `ad_${id}`;
-    const result = await uploadToCloudinary(req.file.buffer, publicId, 'ads', type);
-    await db.run('INSERT INTO ads (id,name,url,public_id,type,created_at) VALUES (?,?,?,?,?,?)',
-      id, req.body.name||req.file.originalname, result.secure_url, result.public_id, type, unixNow());
-    res.json({id, name:req.body.name||req.file.originalname, url:result.secure_url});
+    const type=req.file.mimetype.startsWith('video')?'video':'image';
+    const id=uuid();
+    await db.run('INSERT INTO ads (id,name,file,type) VALUES (?,?,?,?)',id,req.body.name||req.file.originalname,req.file.filename,type);
+    res.json({id,name:req.body.name||req.file.originalname});
   } catch(e){ res.status(500).json({error:e.message}); }
 });
-
 app.get('/api/ads', async (_,res) => {
   const ads=await db.all('SELECT * FROM ads WHERE active=1 ORDER BY created_at DESC');
-  res.json(ads.map(a=>({...a})));
+  res.json(ads.map(a=>({...a,url:'/uploads/ads/'+a.file})));
 });
 app.get('/api/ads/random', async (_,res) => {
   const ads=await db.all('SELECT * FROM ads WHERE active=1');
   if(!ads.length) return res.json(null);
-  res.json(ads[Math.floor(Math.random()*ads.length)]);
+  const ad=ads[Math.floor(Math.random()*ads.length)];
+  res.json({...ad,url:'/uploads/ads/'+ad.file});
 });
 app.delete('/api/ads/:id', admin, async (req,res) => {
   const ad=await db.get('SELECT * FROM ads WHERE id=?',req.params.id);
-  if(ad?.public_id) await deleteFromCloudinary(ad.public_id, ad.type==='video'?'video':'image');
+  if(ad?.file){try{fs.unlinkSync('uploads/ads/'+ad.file);}catch{}}
   await db.run('DELETE FROM ads WHERE id=?',req.params.id);
   res.json({ok:true});
 });
 
 // ── Stripe ────────────────────────────────────────────────────
+// Create checkout session
 app.post('/api/purchase/checkout', async (req,res) => {
   const sid = req.headers['x-session-id'];
   const { bookId } = req.body;
@@ -438,8 +428,11 @@ app.post('/api/purchase/checkout', async (req,res) => {
       line_items: [{
         price_data: {
           currency: 'usd',
-          product_data: { name: 'Pagebound — Unlock next 10,000 words', description: 'Read on without waiting until tomorrow.' },
-          unit_amount: 99,
+          product_data: {
+            name: 'Pagebound — Unlock next 10,000 words',
+            description: 'Read on without waiting until tomorrow.',
+          },
+          unit_amount: 99, // $0.99
         },
         quantity: 1,
       }],
@@ -449,29 +442,38 @@ app.post('/api/purchase/checkout', async (req,res) => {
       metadata: { sessionId: sid, bookId },
     });
     res.json({ url: session.url });
-  } catch(e) { res.status(500).json({error: e.message}); }
+  } catch(e) {
+    console.error('Stripe checkout error:', e.message);
+    res.status(500).json({error: e.message});
+  }
 });
 
+// Stripe webhook — confirm payment and activate unlock
 app.post('/api/stripe/webhook',
   express.raw({type:'application/json'}),
   async (req,res) => {
     const sig = req.headers['stripe-signature'];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     let event;
     try {
-      event = process.env.STRIPE_WEBHOOK_SECRET
-        ? stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET)
+      event = webhookSecret
+        ? stripe.webhooks.constructEvent(req.body, sig, webhookSecret)
         : JSON.parse(req.body);
-    } catch(e) { return res.status(400).send('Webhook Error'); }
+    } catch(e) {
+      console.error('Webhook sig error:', e.message);
+      return res.status(400).send('Webhook Error');
+    }
     if (event.type === 'checkout.session.completed') {
       const cs = event.data.object;
       const { sessionId, bookId } = cs.metadata||{};
       if (sessionId && bookId) {
         try {
           await db.run(
-            `INSERT IGNORE INTO paid_unlocks (id,session_id,book_id,stripe_session_id,words_unlocked,words_used,active,created_at)
-             VALUES (?,?,?,?,10000,0,1,?)`,
-            uuid(), sessionId, bookId, cs.id, unixNow()
+            `INSERT OR IGNORE INTO paid_unlocks (id,session_id,book_id,stripe_session_id,words_unlocked,words_used,active)
+             VALUES (?,?,?,?,10000,0,1)`,
+            uuid(), sessionId, bookId, cs.id
           );
+          console.log('Paid unlock created for session', sessionId, 'book', bookId);
         } catch(e) { console.error('DB unlock error:', e.message); }
       }
     }
@@ -479,6 +481,7 @@ app.post('/api/stripe/webhook',
   }
 );
 
+// Check if session has active paid unlock for a book
 app.get('/api/purchase/status/:bookId', async (req,res) => {
   const sid = req.headers['x-session-id'];
   if (!sid) return res.status(400).json({error:'No session'});
@@ -489,6 +492,7 @@ app.get('/api/purchase/status/:bookId', async (req,res) => {
   res.json({ active: !!unlock, wordsUnlocked: unlock?.words_unlocked||0, wordsUsed: unlock?.words_used||0 });
 });
 
+// Record words consumed from paid unlock (called as reader progresses)
 app.post('/api/purchase/consume', async (req,res) => {
   const sid = req.headers['x-session-id'];
   const { bookId, wordsRead } = req.body;
@@ -499,12 +503,17 @@ app.post('/api/purchase/consume', async (req,res) => {
   if (!unlock) return res.json({active:false});
   const newUsed = (unlock.words_used||0) + (wordsRead||0);
   const exhausted = newUsed >= unlock.words_unlocked;
-  await db.run('UPDATE paid_unlocks SET words_used=?, active=? WHERE id=?', newUsed, exhausted?0:1, unlock.id);
+  await db.run(
+    'UPDATE paid_unlocks SET words_used=?, active=? WHERE id=?',
+    newUsed, exhausted ? 0 : 1, unlock.id
+  );
   res.json({ active: !exhausted, wordsUsed: newUsed, wordsUnlocked: unlock.words_unlocked });
 });
 
-// ── Admin + Health ────────────────────────────────────────────
+// ── Admin verify ──────────────────────────────────────────────
+// Health check — always returns 200 so you know server is up
 app.get('/api/health', (_,res) => res.json({ok:true, time:new Date().toISOString()}));
+
 app.post('/api/admin/verify', (req,res) => {
   res.json(req.body.password===ADMIN_PASS?{ok:true}:{error:'Wrong password'});
 });
@@ -512,56 +521,88 @@ app.post('/api/admin/verify', (req,res) => {
 // ── Analytics ─────────────────────────────────────────────────
 app.get('/api/analytics', admin, async (req,res) => {
   const t=today();
-  const tsWeekAgo = unixNow()-7*86400;
-  const ts14Ago   = unixNow()-14*86400;
 
-  const totalVisitors  = (await db.get('SELECT COUNT(DISTINCT id) as c FROM sessions')).c;
-  const todayVisitors  = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE FROM_UNIXTIME(created_at,"%Y-%m-%d")=?',t)).c;
-  const weekVisitors   = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE created_at>=?',tsWeekAgo)).c;
-  const totalReaders   = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM reading_events')).c;
-  const todayReaders   = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM reading_events WHERE date=?',t)).c;
-  const avgSecsPerDay  = (await db.get('SELECT AVG(secs_watched) as a FROM daily_state WHERE secs_watched>0')).a||0;
-  const totalSecsRead  = (await db.get('SELECT SUM(secs_read) as s FROM reading_events')).s||0;
-  const todaySecsRead  = (await db.get('SELECT SUM(secs_read) as s FROM reading_events WHERE date=?',t)).s||0;
-  const totalEpsDone   = (await db.get('SELECT SUM(eps_today) as s FROM daily_state')).s||0;
-  const todayEpsDone   = (await db.get('SELECT SUM(eps_today) as s FROM daily_state WHERE date=?',t)).s||0;
+  // Visitors
+  const totalVisitors    = (await db.get('SELECT COUNT(DISTINCT id) as c FROM sessions')).c;
+  const todayVisitors    = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE date(created_at,\'unixepoch\')=?',t)).c;
+  const weekVisitors     = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE created_at>=strftime(\'%s\',\'now\',\'-7 days\')')).c;
 
+  // Readers (people who actually read something)
+  const totalReaders     = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM reading_events')).c;
+  const todayReaders     = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM reading_events WHERE date=?',t)).c;
+
+  // Time spent
+  const avgSecsPerDay    = (await db.get('SELECT AVG(secs_watched) as a FROM daily_state WHERE secs_watched>0')).a||0;
+  const totalSecsRead    = (await db.get('SELECT SUM(secs_read) as s FROM reading_events')).s||0;
+  const todaySecsRead    = (await db.get('SELECT SUM(secs_read) as s FROM reading_events WHERE date=?',t)).s||0;
+
+  // Episodes
+  const totalEpsDone     = (await db.get('SELECT SUM(eps_today) as s FROM daily_state')).s||0;
+  const todayEpsDone     = (await db.get('SELECT SUM(eps_today) as s FROM daily_state WHERE date=?',t)).s||0;
+
+  // Popular books
   const popularBooks = await db.all(`
     SELECT b.title, b.author, COUNT(DISTINCT re.session_id) as readers,
            SUM(re.secs_read) as total_secs, COUNT(re.id) as events
-    FROM books b LEFT JOIN reading_events re ON b.id=re.book_id
+    FROM books b
+    LEFT JOIN reading_events re ON b.id=re.book_id
     GROUP BY b.id ORDER BY readers DESC LIMIT 10
   `);
+
+  // Daily visitors last 14 days
   const dailyVisitors = await db.all(`
-    SELECT FROM_UNIXTIME(created_at,'%Y-%m-%d') as date, COUNT(DISTINCT session_id) as visitors
-    FROM page_views WHERE created_at>=? GROUP BY FROM_UNIXTIME(created_at,'%Y-%m-%d') ORDER BY date ASC
-  `, ts14Ago);
+    SELECT date(created_at,'unixepoch') as date, COUNT(DISTINCT session_id) as visitors
+    FROM page_views
+    WHERE created_at>=strftime('%s','now','-14 days')
+    GROUP BY date(created_at,'unixepoch')
+    ORDER BY date ASC
+  `);
+
+  // Daily reading time last 14 days
   const dailyReading = await db.all(`
     SELECT date, SUM(secs_read) as secs, COUNT(DISTINCT session_id) as readers
-    FROM reading_events WHERE created_at>=? GROUP BY date ORDER BY date ASC
-  `, ts14Ago);
+    FROM reading_events
+    WHERE created_at>=strftime('%s','now','-14 days')
+    GROUP BY date ORDER BY date ASC
+  `);
+
+  // Recent sessions
   const recentSessions = await db.all(`
-    SELECT s.id, s.ip, s.first_seen, s.last_seen, s.total_visits, ds.secs_watched, ds.eps_today
-    FROM sessions s LEFT JOIN daily_state ds ON s.id=ds.session_id AND ds.date=?
+    SELECT s.id, s.ip, s.first_seen, s.last_seen, s.total_visits,
+           ds.secs_watched, ds.eps_today
+    FROM sessions s
+    LEFT JOIN daily_state ds ON s.id=ds.session_id AND ds.date=?
     ORDER BY s.last_seen DESC LIMIT 20
   `, t);
 
-  res.json({ totalVisitors, todayVisitors, weekVisitors, totalReaders, todayReaders,
-    avgSecsPerDay:Math.round(avgSecsPerDay), totalSecsRead, todaySecsRead,
-    totalEpsDone, todayEpsDone, popularBooks, dailyVisitors, dailyReading, recentSessions });
+  res.json({
+    totalVisitors, todayVisitors, weekVisitors,
+    totalReaders, todayReaders,
+    avgSecsPerDay: Math.round(avgSecsPerDay),
+    totalSecsRead, todaySecsRead,
+    totalEpsDone, todayEpsDone,
+    popularBooks, dailyVisitors, dailyReading, recentSessions
+  });
 });
 
 // ── Frontend ──────────────────────────────────────────────────
+// All these serve index.html — JS router handles the rest
 app.get('/admin',    (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('/book/:id', (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('*',         (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
 
-process.on('uncaughtException',  (err)    => console.error('Uncaught exception:', err.message));
-process.on('unhandledRejection', (reason) => console.error('Unhandled rejection:', reason));
+// Global error handlers — server must never crash
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
 
 initDB().then(() => {
   app.listen(PORT, () => console.log(`Pagebound running on port ${PORT}`));
 }).catch(err => {
   console.error('DB init failed:', err.message);
+  // Start server anyway so it returns errors instead of being blank
   app.listen(PORT, () => console.log(`Pagebound started WITHOUT DB on port ${PORT}`));
 });
