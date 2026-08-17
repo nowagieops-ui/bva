@@ -127,6 +127,7 @@ async function initDB() {
     database: process.env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
+    connectTimeout: 8000, // fail fast instead of hanging until the platform's own gateway times out
   });
   for (const stmt of SCHEMA) await pool.query(stmt);
 
@@ -167,6 +168,20 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// Wrap async route handlers so a rejected promise (e.g. a DB error) reaches
+// Express's error handling instead of leaving the request hanging with no
+// response until the platform's own gateway times out.
+const ah = fn => (req,res,next) => Promise.resolve(fn(req,res,next)).catch(next);
+
+// Respond immediately if the DB isn't connected instead of hanging on every
+// query until the pool's connectTimeout (or the platform's gateway) gives up.
+const DB_EXEMPT_PATHS = ['/health', '/admin/verify'];
+app.use('/api', (req,res,next) => {
+  if (DB_EXEMPT_PATHS.includes(req.path)) return next();
+  if (!db) return res.status(503).json({error:'Database not connected — check DB_HOST/DB_NAME/DB_USER/DB_PASS and that this server\'s IP is allowed to connect remotely.'});
+  next();
+});
+
 // ── Admin guard ───────────────────────────────────────────────
 function admin(req,res,next) {
   if((req.headers['x-admin-pass']||req.body?.adminPass)!==ADMIN_PASS) return res.status(401).json({error:'Unauthorized'});
@@ -178,7 +193,7 @@ function today() { return new Date().toISOString().split('T')[0]; }
 function getIP(req) { return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown'; }
 
 // ── Session ───────────────────────────────────────────────────
-app.post('/api/session', async (req,res) => {
+app.post('/api/session', ah(async (req,res) => {
   const { sessionId } = req.body;
   const ip = getIP(req);
   const ua = req.headers['user-agent']||'';
@@ -195,7 +210,7 @@ app.post('/api/session', async (req,res) => {
   await db.run('INSERT INTO sessions (id,ip,user_agent) VALUES (?,?,?)', id, ip, ua);
   await db.run('INSERT INTO page_views (id,session_id,path) VALUES (?,?,?)', uuid(), id, req.body.path||'/');
   res.json({sessionId:id});
-});
+}));
 
 // ── Daily state ───────────────────────────────────────────────
 async function getOrCreateDaily(sessionId) {
@@ -209,14 +224,14 @@ async function getOrCreateDaily(sessionId) {
   return s;
 }
 
-app.get('/api/daily', async (req,res) => {
+app.get('/api/daily', ah(async (req,res) => {
   const sid = req.headers['x-session-id'];
   if (!sid) return res.status(400).json({error:'No session'});
   const s = await getOrCreateDaily(sid);
   res.json({...s, ads_hit:JSON.parse(s.ads_hit||'[]'), effectiveTimeLimit:3600+(s.bonus_secs||0), effectiveEpLimit:3+(s.bonus_eps||0)});
-});
+}));
 
-app.post('/api/daily/tick', async (req,res) => {
+app.post('/api/daily/tick', ah(async (req,res) => {
   const sid = req.headers['x-session-id'];
   const {delta=10, bookId, episodeNumber} = req.body;
   const s = await getOrCreateDaily(sid);
@@ -228,48 +243,48 @@ app.post('/api/daily/tick', async (req,res) => {
     else await db.run('INSERT INTO reading_events (id,session_id,book_id,episode_number,secs_read,date) VALUES (?,?,?,?,?,?)', uuid(), sid, bookId, episodeNumber||0, delta, today());
   }
   res.json({ok:true});
-});
+}));
 
-app.post('/api/daily/ad-hit', async (req,res) => {
+app.post('/api/daily/ad-hit', ah(async (req,res) => {
   const sid=req.headers['x-session-id'], {trigger}=req.body;
   const s=await getOrCreateDaily(sid);
   const hits=JSON.parse(s.ads_hit||'[]');
   if(!hits.includes(trigger)){hits.push(trigger);await db.run('UPDATE daily_state SET ads_hit=? WHERE session_id=? AND date=?',JSON.stringify(hits),sid,today());}
   res.json({ok:true});
-});
+}));
 
-app.post('/api/daily/episode-done', async (req,res) => {
+app.post('/api/daily/episode-done', ah(async (req,res) => {
   const sid=req.headers['x-session-id'];
   const s=await getOrCreateDaily(sid);
   await db.run('UPDATE daily_state SET eps_today=? WHERE session_id=? AND date=?',(s.eps_today||0)+1,sid,today());
   res.json({ok:true});
-});
+}));
 
 const MAX_BONUS_EPS = 2; // caps the daily episode total at 3 base + 2 earned = 5
-app.post('/api/daily/earn', async (req,res) => {
+app.post('/api/daily/earn', ah(async (req,res) => {
   const sid=req.headers['x-session-id'],{action}=req.body;
   const te={ad:900,share:1800,both:2700},ee={ad:0,share:1,both:2};
   const s=await getOrCreateDaily(sid);
   const newBonusEps=Math.min((s.bonus_eps||0)+(ee[action]||0), MAX_BONUS_EPS);
   await db.run('UPDATE daily_state SET bonus_secs=?,bonus_eps=? WHERE session_id=? AND date=?',(s.bonus_secs||0)+(te[action]||0),newBonusEps,sid,today());
   res.json({ok:true});
-});
+}));
 
 // ── Progress ──────────────────────────────────────────────────
-app.get('/api/progress/:contentId', async (req,res) => {
+app.get('/api/progress/:contentId', ah(async (req,res) => {
   const sid=req.headers['x-session-id'];
   let p=await db.get('SELECT * FROM watch_progress WHERE session_id=? AND content_id=?',sid,req.params.contentId);
   if(!p){const id=uuid();await db.run('INSERT INTO watch_progress (id,session_id,content_id) VALUES (?,?,?)',id,sid,req.params.contentId);p=await db.get('SELECT * FROM watch_progress WHERE id=?',id);}
   res.json({...p,done_eps:JSON.parse(p.done_eps||'[]')});
-});
+}));
 
-app.post('/api/progress/:contentId', async (req,res) => {
+app.post('/api/progress/:contentId', ah(async (req,res) => {
   const sid=req.headers['x-session-id'],{currentEp,doneEps}=req.body;
   await db.run(`INSERT INTO watch_progress (id,session_id,content_id,current_ep,done_eps) VALUES (?,?,?,?,?)
     ON DUPLICATE KEY UPDATE current_ep=VALUES(current_ep),done_eps=VALUES(done_eps)`,
     uuid(),sid,req.params.contentId,currentEp,JSON.stringify(doneEps||[]));
   res.json({ok:true});
-});
+}));
 
 // ── Books ─────────────────────────────────────────────────────
 function parseBook(text,wpe){
@@ -398,31 +413,31 @@ app.post('/api/books/:id/cover', admin, coverUp.single('cover'), async (req,res)
   }
 });
 
-app.get('/api/books', async (_,res) => {
+app.get('/api/books', ah(async (_,res) => {
   const books=await db.all('SELECT * FROM books ORDER BY created_at DESC');
   res.json(books.map(b=>({...b,coverUrl:b.cover_file||null})));
-});
+}));
 
-app.get('/api/books/:id', async (req,res) => {
+app.get('/api/books/:id', ah(async (req,res) => {
   const b=await db.get('SELECT * FROM books WHERE id=?',req.params.id);
   if(!b) return res.status(404).json({error:'Not found'});
   const eps=await db.all('SELECT id,episode_number,title,word_count FROM book_episodes WHERE book_id=? ORDER BY episode_number',req.params.id);
   res.json({...b,coverUrl:b.cover_file||null,episodes:eps});
-});
+}));
 
-app.get('/api/books/:id/episodes/:num', async (req,res) => {
+app.get('/api/books/:id/episodes/:num', ah(async (req,res) => {
   const ep=await db.get('SELECT * FROM book_episodes WHERE book_id=? AND episode_number=?',req.params.id,req.params.num);
   if(!ep) return res.status(404).json({error:'Not found'});
   res.json(ep);
-});
+}));
 
-app.delete('/api/books/:id', admin, async (req,res) => {
+app.delete('/api/books/:id', admin, ah(async (req,res) => {
   const b=await db.get('SELECT * FROM books WHERE id=?',req.params.id);
   if(b?.cover_public_id){try{await cloudinary.uploader.destroy(b.cover_public_id);}catch{}}
   await db.run('DELETE FROM book_episodes WHERE book_id=?',req.params.id);
   await db.run('DELETE FROM books WHERE id=?',req.params.id);
   res.json({ok:true});
-});
+}));
 
 // ── Ads ───────────────────────────────────────────────────────
 app.post('/api/ads', admin, (req,res,next) => {
@@ -449,22 +464,22 @@ app.post('/api/ads', admin, (req,res,next) => {
     if(tmpPath) fs.unlink(tmpPath, ()=>{});
   }
 });
-app.get('/api/ads', async (_,res) => {
+app.get('/api/ads', ah(async (_,res) => {
   const ads=await db.all('SELECT * FROM ads WHERE active=1 ORDER BY created_at DESC');
   res.json(ads.map(a=>({...a,url:a.file})));
-});
-app.get('/api/ads/random', async (_,res) => {
+}));
+app.get('/api/ads/random', ah(async (_,res) => {
   const ads=await db.all('SELECT * FROM ads WHERE active=1');
   if(!ads.length) return res.json(null);
   const ad=ads[Math.floor(Math.random()*ads.length)];
   res.json({...ad,url:ad.file});
-});
-app.delete('/api/ads/:id', admin, async (req,res) => {
+}));
+app.delete('/api/ads/:id', admin, ah(async (req,res) => {
   const ad=await db.get('SELECT * FROM ads WHERE id=?',req.params.id);
   if(ad?.public_id){try{await cloudinary.uploader.destroy(ad.public_id, {resource_type: ad.type==='video'?'video':'image'});}catch{}}
   await db.run('DELETE FROM ads WHERE id=?',req.params.id);
   res.json({ok:true});
-});
+}));
 
 // ── Stripe ────────────────────────────────────────────────────
 // Create checkout session
@@ -534,7 +549,7 @@ app.post('/api/stripe/webhook',
 );
 
 // Check if session has active paid unlock for a book
-app.get('/api/purchase/status/:bookId', async (req,res) => {
+app.get('/api/purchase/status/:bookId', ah(async (req,res) => {
   const sid = req.headers['x-session-id'];
   if (!sid) return res.status(400).json({error:'No session'});
   const unlock = await db.get(
@@ -542,10 +557,10 @@ app.get('/api/purchase/status/:bookId', async (req,res) => {
     sid, req.params.bookId
   );
   res.json({ active: !!unlock, wordsUnlocked: unlock?.words_unlocked||0, wordsUsed: unlock?.words_used||0 });
-});
+}));
 
 // Record words consumed from paid unlock (called as reader progresses)
-app.post('/api/purchase/consume', async (req,res) => {
+app.post('/api/purchase/consume', ah(async (req,res) => {
   const sid = req.headers['x-session-id'];
   const { bookId, wordsRead } = req.body;
   const unlock = await db.get(
@@ -560,7 +575,7 @@ app.post('/api/purchase/consume', async (req,res) => {
     newUsed, exhausted ? 0 : 1, unlock.id
   );
   res.json({ active: !exhausted, wordsUsed: newUsed, wordsUnlocked: unlock.words_unlocked });
-});
+}));
 
 // ── Admin verify ──────────────────────────────────────────────
 // Health check — always returns 200 so you know server is up
@@ -571,7 +586,7 @@ app.post('/api/admin/verify', (req,res) => {
 });
 
 // ── Analytics ─────────────────────────────────────────────────
-app.get('/api/analytics', admin, async (req,res) => {
+app.get('/api/analytics', admin, ah(async (req,res) => {
   const t=today();
 
   // Visitors
@@ -635,13 +650,21 @@ app.get('/api/analytics', admin, async (req,res) => {
     totalEpsDone, todayEpsDone,
     popularBooks, dailyVisitors, dailyReading, recentSessions
   });
-});
+}));
 
 // ── Frontend ──────────────────────────────────────────────────
 // All these serve index.html — JS router handles the rest
 app.get('/admin',    (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('/book/:id', (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('*',         (_,res) => res.sendFile(path.join(__dirname,'public','index.html')));
+
+// Catches errors passed via next(err) from ah()-wrapped routes — makes sure
+// a DB/query failure always gets a fast JSON response instead of a hang.
+app.use((err, req, res, next) => {
+  console.error('Route error:', err.message);
+  if (res.headersSent) return next(err);
+  res.status(500).json({error: err.message||'Server error'});
+});
 
 // Global error handlers — server must never crash
 process.on('uncaughtException', (err) => {
