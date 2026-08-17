@@ -4,12 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pagebound</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%96%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<!-- jszip/pdf.js/mammoth are only needed for the admin's epub/pdf/docx book
+     uploader — loaded lazily on demand (see loadScript/ensure* below) instead
+     of blocking every visitor's initial page render. -->
 
 <style>
 /* Screenshot / copy deterrents. Note: no browser exposes an event for OS-level
@@ -1130,9 +1131,35 @@ let tickTimer = null, adTimer = null, afterAdFn = null;
 let pendingBookFile = null, pendingCoverFile = null, pendingAdFile = null;
 let currentBookId = null; // for analytics tracking
 
+// ── Lazy-loaded libs ──────────────────────────────────────────
+// Only the admin's book uploader needs these (epub/pdf/docx parsing) —
+// load on first use instead of blocking every reader's page load.
+const _scriptCache = {};
+function loadScript(src) {
+  if (!_scriptCache[src]) {
+    _scriptCache[src] = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Failed to load '+src));
+      document.head.appendChild(s);
+    });
+  }
+  return _scriptCache[src];
+}
+async function ensureJSZip() {
+  if (!window.JSZip) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+}
+async function ensurePdfJs() {
+  if (!window.pdfjsLib) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+}
+async function ensureMammoth() {
+  if (!window.mammoth) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+}
+
 // ── Boot ──────────────────────────────────────────────────────
 async function boot() {
-  if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   try {
     const r = await fetch(`${API}/api/session`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sessionId, path: location.pathname }) });
     const d = await r.json();
@@ -1947,7 +1974,7 @@ async function readFileAsText(file) {
     return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Could not read file'));r.readAsText(file,'utf-8');});
   }
   if(ext==='epub'||file.type==='application/epub+zip'){
-    if(!window.JSZip){await new Promise(r=>setTimeout(r,1000)); if(!window.JSZip)throw new Error('EPUB support failed to load. Please refresh the page and try again.');}
+    try{await ensureJSZip();}catch{throw new Error('EPUB support failed to load. Check your connection and try again.');}
     const buf=await file.arrayBuffer();
     const zip=await window.JSZip.loadAsync(buf);
     const containerXml=await zip.file('META-INF/container.xml')?.async('text')||'';
@@ -2020,7 +2047,7 @@ async function readFileAsText(file) {
     return txt;
   }
   if(ext==='pdf'||file.type==='application/pdf'){
-    if(!window.pdfjsLib){await new Promise(r=>setTimeout(r,1000)); if(!window.pdfjsLib)throw new Error('PDF support failed to load. Please refresh the page and try again.');}
+    try{await ensurePdfJs();}catch{throw new Error('PDF support failed to load. Check your connection and try again.');}
     const buf=await file.arrayBuffer();
     const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
     let txt='';
@@ -2029,7 +2056,7 @@ async function readFileAsText(file) {
     return txt;
   }
   if(['docx','doc'].includes(ext)||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document'){
-    if(!window.mammoth){await new Promise(r=>setTimeout(r,1000)); if(!window.mammoth)throw new Error('DOCX support failed to load. Please refresh the page and try again.');}
+    try{await ensureMammoth();}catch{throw new Error('DOCX support failed to load. Check your connection and try again.');}
     const buf=await file.arrayBuffer();
     const result=await window.mammoth.convertToHtml({arrayBuffer:buf});
     let html=result.value||'';
