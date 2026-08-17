@@ -1,162 +1,171 @@
 const express      = require('express');
 const stripe       = require('stripe')(process.env.STRIPE_SECRET_KEY||'');
-const sqlite3      = require('sqlite3').verbose();
-const { open }     = require('sqlite');
+const mysql        = require('mysql2/promise');
+const cloudinary   = require('cloudinary').v2;
 const multer       = require('multer');
 const cors         = require('cors');
 const { v4: uuid } = require('uuid');
 const path         = require('path');
 const fs           = require('fs');
+const os           = require('os');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
 
-// ── Dirs ──────────────────────────────────────────────────────
-// Ensure all required directories exist
-const REQUIRED_DIRS = ['uploads/books','uploads/covers','uploads/ads','db'];
-REQUIRED_DIRS.forEach(d => {
-  try { fs.mkdirSync(d, {recursive:true}); }
-  catch(e) { console.error('Could not create dir', d, e.message); }
+// ── Cloudinary ────────────────────────────────────────────────
+// File uploads (covers, ads) live on Cloudinary so they survive redeploys —
+// the app filesystem is ephemeral and gets wiped on every deploy.
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+function uploadBuffer(buffer, folder, resourceType) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream({ folder, resource_type: resourceType }, (err, result) => {
+      if (err) reject(err); else resolve(result);
+    });
+    stream.end(buffer);
+  });
+}
+
 // ── DB ────────────────────────────────────────────────────────
-let db;
+// MySQL (Hostinger) instead of local SQLite — SQLite's file was getting
+// wiped on every redeploy since it lived on the ephemeral app filesystem.
+let pool, db;
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS books (
+    id VARCHAR(36) PRIMARY KEY,
+    title TEXT NOT NULL,
+    author VARCHAR(255),
+    cover_file TEXT,
+    cover_public_id VARCHAR(255),
+    words_per_episode INT DEFAULT 2000,
+    total_episodes INT DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS book_episodes (
+    id VARCHAR(36) PRIMARY KEY,
+    book_id VARCHAR(36) NOT NULL,
+    episode_number INT NOT NULL,
+    title VARCHAR(500),
+    content MEDIUMTEXT NOT NULL,
+    word_count INT,
+    INDEX idx_book_episodes_book (book_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS ads (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    file TEXT NOT NULL,
+    public_id VARCHAR(255),
+    type VARCHAR(20) NOT NULL,
+    active TINYINT DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    ip VARCHAR(64),
+    user_agent VARCHAR(500),
+    country VARCHAR(100),
+    first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+    total_visits INT DEFAULT 1
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS daily_state (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    date VARCHAR(10) NOT NULL,
+    secs_watched INT DEFAULT 0,
+    bonus_secs INT DEFAULT 0,
+    eps_today INT DEFAULT 0,
+    bonus_eps INT DEFAULT 0,
+    ads_hit TEXT,
+    UNIQUE KEY uk_daily_state (session_id, date)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS reading_events (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    book_id VARCHAR(36) NOT NULL,
+    episode_number INT NOT NULL,
+    secs_read INT DEFAULT 0,
+    date VARCHAR(10) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS watch_progress (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    content_id VARCHAR(36) NOT NULL,
+    current_ep INT DEFAULT 0,
+    done_eps TEXT,
+    UNIQUE KEY uk_watch_progress (session_id, content_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS page_views (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    path VARCHAR(500),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+  `CREATE TABLE IF NOT EXISTS paid_unlocks (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL,
+    book_id VARCHAR(36) NOT NULL,
+    stripe_session_id VARCHAR(255) UNIQUE,
+    words_unlocked INT DEFAULT 10000,
+    words_used INT DEFAULT 0,
+    active TINYINT DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+];
+
 async function initDB() {
-  db = await open({ filename:'db/pagebound.db', driver:sqlite3.Database });
-  await db.exec('PRAGMA journal_mode=WAL');
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS books (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      author TEXT,
-      cover_file TEXT,
-      words_per_episode INTEGER DEFAULT 2000,
-      total_episodes INTEGER DEFAULT 0,
-      created_at INTEGER DEFAULT (strftime('%s','now'))
-    );
-    CREATE TABLE IF NOT EXISTS book_episodes (
-      id TEXT PRIMARY KEY,
-      book_id TEXT NOT NULL,
-      episode_number INTEGER NOT NULL,
-      title TEXT,
-      content TEXT NOT NULL,
-      word_count INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS ads (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      file TEXT NOT NULL,
-      type TEXT NOT NULL,
-      active INTEGER DEFAULT 1,
-      created_at INTEGER DEFAULT (strftime('%s','now'))
-    );
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      ip TEXT,
-      user_agent TEXT,
-      country TEXT,
-      first_seen INTEGER DEFAULT (strftime('%s','now')),
-      last_seen INTEGER DEFAULT (strftime('%s','now')),
-      total_visits INTEGER DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS daily_state (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      date TEXT NOT NULL,
-      secs_watched INTEGER DEFAULT 0,
-      bonus_secs INTEGER DEFAULT 0,
-      eps_today INTEGER DEFAULT 0,
-      bonus_eps INTEGER DEFAULT 0,
-      ads_hit TEXT DEFAULT '[]',
-      UNIQUE(session_id, date)
-    );
-    CREATE TABLE IF NOT EXISTS reading_events (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      book_id TEXT NOT NULL,
-      episode_number INTEGER NOT NULL,
-      secs_read INTEGER DEFAULT 0,
-      date TEXT NOT NULL,
-      created_at INTEGER DEFAULT (strftime('%s','now'))
-    );
-    CREATE TABLE IF NOT EXISTS watch_progress (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      content_id TEXT NOT NULL,
-      current_ep INTEGER DEFAULT 0,
-      done_eps TEXT DEFAULT '[]',
-      UNIQUE(session_id, content_id)
-    );
-    CREATE TABLE IF NOT EXISTS page_views (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      path TEXT,
-      created_at INTEGER DEFAULT (strftime('%s','now'))
-    );
-    CREATE TABLE IF NOT EXISTS paid_unlocks (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      book_id TEXT NOT NULL,
-      stripe_session_id TEXT UNIQUE,
-      words_unlocked INTEGER DEFAULT 10000,
-      words_used INTEGER DEFAULT 0,
-      active INTEGER DEFAULT 1,
-      created_at INTEGER DEFAULT (strftime('%s','now'))
-    );
-  `);
+  pool = await mysql.createPool({
+    host:     process.env.DB_HOST,
+    user:     process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    waitForConnections: true,
+    connectionLimit: 10,
+  });
+  for (const stmt of SCHEMA) await pool.query(stmt);
+
+  // Thin wrapper so the rest of the file can keep using the
+  // db.get/db.all/db.run(sql, ...params) shape it already used with sqlite.
+  db = {
+    async get(sql, ...params) {
+      const [rows] = await pool.execute(sql, params);
+      return rows[0];
+    },
+    async all(sql, ...params) {
+      const [rows] = await pool.execute(sql, params);
+      return rows;
+    },
+    async run(sql, ...params) {
+      const [result] = await pool.execute(sql, params);
+      return result;
+    },
+  };
   console.log('DB ready');
 }
 
 // ── Multer ────────────────────────────────────────────────────
-function store(dest) {
-  return multer.diskStorage({
-    destination: (_,__,cb) => cb(null,dest),
-    filename:    (_,file,cb) => cb(null,uuid()+path.extname(file.originalname))
-  });
-}
-const bookUp  = multer({storage:store('uploads/books'), limits:{fileSize:50*1024*1024}});
-const coverUp = multer({storage:store('uploads/covers'),limits:{fileSize:5*1024*1024}});
-const adUp    = multer({storage:store('uploads/ads'),   limits:{fileSize:500*1024*1024}});
+// Books/covers are small enough to buffer in memory and stream straight to
+// Cloudinary. Ads can be up to 500MB video, so those go through a tmp file
+// on disk (deleted right after upload) instead of buffering in RAM.
+const bookUp  = multer({storage: multer.memoryStorage(), limits:{fileSize:50*1024*1024}});
+const coverUp = multer({storage: multer.memoryStorage(), limits:{fileSize:5*1024*1024}});
+const adUp    = multer({
+  storage: multer.diskStorage({
+    destination: (_,__,cb) => cb(null, os.tmpdir()),
+    filename:    (_,file,cb) => cb(null, uuid()+path.extname(file.originalname)),
+  }),
+  limits:{fileSize:500*1024*1024},
+});
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
-// Serve uploads with proper headers — video needs range request support
-app.use('/uploads', (req, res, next) => {
-  const filePath = path.join(__dirname, 'uploads', req.path);
-  const ext = path.extname(req.path).toLowerCase();
-  const videoExts = ['.mp4','.mov','.webm','.m4v','.avi'];
-  if (videoExts.includes(ext)) {
-    // Serve video with range support for proper playback
-    if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
-    const stat = fs.statSync(filePath);
-    const mimeTypes = {'.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm','.m4v':'video/mp4','.avi':'video/x-msvideo'};
-    const mime = mimeTypes[ext] || 'video/mp4';
-    const range = req.headers.range;
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0]);
-      const end = parts[1] ? parseInt(parts[1]) : Math.min(start + 1024*1024*2, stat.size - 1);
-      res.writeHead(206, {
-        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': end - start + 1,
-        'Content-Type': mime,
-      });
-      fs.createReadStream(filePath, {start, end}).pipe(res);
-    } else {
-      res.writeHead(200, {
-        'Content-Length': stat.size,
-        'Content-Type': mime,
-        'Accept-Ranges': 'bytes',
-      });
-      fs.createReadStream(filePath).pipe(res);
-    }
-  } else {
-    next();
-  }
-}, express.static('uploads'));
 
 // ── Admin guard ───────────────────────────────────────────────
 function admin(req,res,next) {
@@ -176,7 +185,7 @@ app.post('/api/session', async (req,res) => {
   if (sessionId) {
     const s = await db.get('SELECT id FROM sessions WHERE id=?', sessionId);
     if (s) {
-      await db.run('UPDATE sessions SET last_seen=strftime(\'%s\',\'now\'), total_visits=total_visits+1 WHERE id=?', sessionId);
+      await db.run('UPDATE sessions SET last_seen=NOW(), total_visits=total_visits+1 WHERE id=?', sessionId);
       // Log page view
       await db.run('INSERT INTO page_views (id,session_id,path) VALUES (?,?,?)', uuid(), sessionId, req.body.path||'/');
       return res.json({sessionId:s.id});
@@ -257,7 +266,7 @@ app.get('/api/progress/:contentId', async (req,res) => {
 app.post('/api/progress/:contentId', async (req,res) => {
   const sid=req.headers['x-session-id'],{currentEp,doneEps}=req.body;
   await db.run(`INSERT INTO watch_progress (id,session_id,content_id,current_ep,done_eps) VALUES (?,?,?,?,?)
-    ON CONFLICT(session_id,content_id) DO UPDATE SET current_ep=excluded.current_ep,done_eps=excluded.done_eps`,
+    ON DUPLICATE KEY UPDATE current_ep=VALUES(current_ep),done_eps=VALUES(done_eps)`,
     uuid(),sid,req.params.contentId,currentEp,JSON.stringify(doneEps||[]));
   res.json({ok:true});
 });
@@ -306,23 +315,12 @@ app.post('/api/books/upload', admin, (req,res,next)=>{
     next();
   });
 }, async (req,res) => {
-  const filePath = req.file?.path;
   try{
     const {title,author,wordsPerEpisode=2000}=req.body;
     if(!req.file||!title){
-      if(filePath) try{fs.unlinkSync(filePath);}catch{}
       return res.status(400).json({error:'Missing file or title'});
     }
-    // Read file safely
-    let text;
-    try{
-      text=fs.readFileSync(filePath,'utf8');
-    }catch(e){
-      try{text=fs.readFileSync(filePath,'latin1');}catch(e2){
-        return res.status(400).json({error:'Could not read file — try saving as UTF-8 text'});
-      }
-    }
-    try{fs.unlinkSync(filePath);}catch{}
+    const text=req.file.buffer.toString('utf8');
 
     const wpe=Math.max(500,Math.min(5000,parseInt(wordsPerEpisode)||2000));
     const eps=parseBook(text,wpe);
@@ -343,26 +341,73 @@ app.post('/api/books/upload', admin, (req,res,next)=>{
     res.json({bookId:id,title,totalEpisodes:eps.length});
   }catch(e){
     console.error('Book upload error:',e);
-    if(filePath) try{fs.unlinkSync(filePath);}catch{}
     res.status(500).json({error:e.message||'Upload failed'});
   }
 });
 
+// Rebuild a book's episodes from a fresh file upload, keeping the same book id —
+// watch_progress/reading_events/paid_unlocks are keyed by book_id, not episode
+// content, so readers' progress and purchases stay linked across the rebuild.
+app.post('/api/books/:id/update', admin, (req,res,next)=>{
+  bookUp.single('book')(req,res,err=>{
+    if(err) return res.status(400).json({error:err.message||'Upload failed'});
+    next();
+  });
+}, async (req,res) => {
+  const conn = await pool.getConnection();
+  try{
+    const [existingRows] = await conn.execute('SELECT * FROM books WHERE id=?', [req.params.id]);
+    const existing = existingRows[0];
+    if(!existing) return res.status(404).json({error:'Book not found'});
+    if(!req.file) return res.status(400).json({error:'Missing file'});
+
+    const title = (req.body.title||'').trim() || existing.title;
+    const author = (req.body.author||'').trim() || existing.author;
+    const wpe = Math.max(500,Math.min(5000,parseInt(req.body.wordsPerEpisode)||existing.words_per_episode||2000));
+    const text = req.file.buffer.toString('utf8');
+    const eps = parseBook(text, wpe);
+
+    await conn.beginTransaction();
+    await conn.execute('DELETE FROM book_episodes WHERE book_id=?', [req.params.id]);
+    for(const ep of eps){
+      await conn.execute('INSERT INTO book_episodes (id,book_id,episode_number,title,content,word_count) VALUES (?,?,?,?,?,?)',
+        [uuid(),req.params.id,ep.n,ep.title,ep.content,ep.wordCount]);
+    }
+    await conn.execute('UPDATE books SET title=?,author=?,words_per_episode=?,total_episodes=? WHERE id=?',
+      [title,author,wpe,eps.length,req.params.id]);
+    await conn.commit();
+
+    res.json({bookId:req.params.id,title,totalEpisodes:eps.length});
+  }catch(e){
+    try{ await conn.rollback(); }catch{}
+    console.error('Book update error:',e);
+    res.status(500).json({error:e.message||'Update failed'});
+  }finally{
+    conn.release();
+  }
+});
+
 app.post('/api/books/:id/cover', admin, coverUp.single('cover'), async (req,res) => {
-  await db.run('UPDATE books SET cover_file=? WHERE id=?',req.file.filename,req.params.id);
-  res.json({coverUrl:'/uploads/covers/'+req.file.filename});
+  try {
+    const result = await uploadBuffer(req.file.buffer, 'pagebound/covers', 'image');
+    await db.run('UPDATE books SET cover_file=?,cover_public_id=? WHERE id=?', result.secure_url, result.public_id, req.params.id);
+    res.json({coverUrl: result.secure_url});
+  } catch(e) {
+    console.error('Cover upload error:', e.message);
+    res.status(500).json({error: e.message||'Cover upload failed'});
+  }
 });
 
 app.get('/api/books', async (_,res) => {
   const books=await db.all('SELECT * FROM books ORDER BY created_at DESC');
-  res.json(books.map(b=>({...b,coverUrl:b.cover_file?'/uploads/covers/'+b.cover_file:null})));
+  res.json(books.map(b=>({...b,coverUrl:b.cover_file||null})));
 });
 
 app.get('/api/books/:id', async (req,res) => {
   const b=await db.get('SELECT * FROM books WHERE id=?',req.params.id);
   if(!b) return res.status(404).json({error:'Not found'});
   const eps=await db.all('SELECT id,episode_number,title,word_count FROM book_episodes WHERE book_id=? ORDER BY episode_number',req.params.id);
-  res.json({...b,coverUrl:b.cover_file?'/uploads/covers/'+b.cover_file:null,episodes:eps});
+  res.json({...b,coverUrl:b.cover_file||null,episodes:eps});
 });
 
 app.get('/api/books/:id/episodes/:num', async (req,res) => {
@@ -373,7 +418,7 @@ app.get('/api/books/:id/episodes/:num', async (req,res) => {
 
 app.delete('/api/books/:id', admin, async (req,res) => {
   const b=await db.get('SELECT * FROM books WHERE id=?',req.params.id);
-  if(b?.cover_file){try{fs.unlinkSync('uploads/covers/'+b.cover_file);}catch{}}
+  if(b?.cover_public_id){try{await cloudinary.uploader.destroy(b.cover_public_id);}catch{}}
   await db.run('DELETE FROM book_episodes WHERE book_id=?',req.params.id);
   await db.run('DELETE FROM books WHERE id=?',req.params.id);
   res.json({ok:true});
@@ -389,27 +434,34 @@ app.post('/api/ads', admin, (req,res,next) => {
     next();
   });
 }, async (req,res) => {
+  const tmpPath = req.file?.path;
   try {
     if(!req.file) return res.status(400).json({error:'No file received'});
     const type=req.file.mimetype.startsWith('video')?'video':'image';
+    const result = await cloudinary.uploader.upload(tmpPath, {folder:'pagebound/ads', resource_type: type});
     const id=uuid();
-    await db.run('INSERT INTO ads (id,name,file,type) VALUES (?,?,?,?)',id,req.body.name||req.file.originalname,req.file.filename,type);
+    await db.run('INSERT INTO ads (id,name,file,public_id,type) VALUES (?,?,?,?,?)',id,req.body.name||req.file.originalname,result.secure_url,result.public_id,type);
     res.json({id,name:req.body.name||req.file.originalname});
-  } catch(e){ res.status(500).json({error:e.message}); }
+  } catch(e){
+    console.error('Ad upload error:', e.message);
+    res.status(500).json({error:e.message});
+  } finally {
+    if(tmpPath) fs.unlink(tmpPath, ()=>{});
+  }
 });
 app.get('/api/ads', async (_,res) => {
   const ads=await db.all('SELECT * FROM ads WHERE active=1 ORDER BY created_at DESC');
-  res.json(ads.map(a=>({...a,url:'/uploads/ads/'+a.file})));
+  res.json(ads.map(a=>({...a,url:a.file})));
 });
 app.get('/api/ads/random', async (_,res) => {
   const ads=await db.all('SELECT * FROM ads WHERE active=1');
   if(!ads.length) return res.json(null);
   const ad=ads[Math.floor(Math.random()*ads.length)];
-  res.json({...ad,url:'/uploads/ads/'+ad.file});
+  res.json({...ad,url:ad.file});
 });
 app.delete('/api/ads/:id', admin, async (req,res) => {
   const ad=await db.get('SELECT * FROM ads WHERE id=?',req.params.id);
-  if(ad?.file){try{fs.unlinkSync('uploads/ads/'+ad.file);}catch{}}
+  if(ad?.public_id){try{await cloudinary.uploader.destroy(ad.public_id, {resource_type: ad.type==='video'?'video':'image'});}catch{}}
   await db.run('DELETE FROM ads WHERE id=?',req.params.id);
   res.json({ok:true});
 });
@@ -469,7 +521,7 @@ app.post('/api/stripe/webhook',
       if (sessionId && bookId) {
         try {
           await db.run(
-            `INSERT OR IGNORE INTO paid_unlocks (id,session_id,book_id,stripe_session_id,words_unlocked,words_used,active)
+            `INSERT IGNORE INTO paid_unlocks (id,session_id,book_id,stripe_session_id,words_unlocked,words_used,active)
              VALUES (?,?,?,?,10000,0,1)`,
             uuid(), sessionId, bookId, cs.id
           );
@@ -524,8 +576,8 @@ app.get('/api/analytics', admin, async (req,res) => {
 
   // Visitors
   const totalVisitors    = (await db.get('SELECT COUNT(DISTINCT id) as c FROM sessions')).c;
-  const todayVisitors    = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE date(created_at,\'unixepoch\')=?',t)).c;
-  const weekVisitors     = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE created_at>=strftime(\'%s\',\'now\',\'-7 days\')')).c;
+  const todayVisitors    = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE DATE(created_at)=?',t)).c;
+  const weekVisitors     = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM page_views WHERE created_at>=(NOW() - INTERVAL 7 DAY)')).c;
 
   // Readers (people who actually read something)
   const totalReaders     = (await db.get('SELECT COUNT(DISTINCT session_id) as c FROM reading_events')).c;
@@ -551,10 +603,10 @@ app.get('/api/analytics', admin, async (req,res) => {
 
   // Daily visitors last 14 days
   const dailyVisitors = await db.all(`
-    SELECT date(created_at,'unixepoch') as date, COUNT(DISTINCT session_id) as visitors
+    SELECT DATE(created_at) as date, COUNT(DISTINCT session_id) as visitors
     FROM page_views
-    WHERE created_at>=strftime('%s','now','-14 days')
-    GROUP BY date(created_at,'unixepoch')
+    WHERE created_at>=(NOW() - INTERVAL 14 DAY)
+    GROUP BY DATE(created_at)
     ORDER BY date ASC
   `);
 
@@ -562,7 +614,7 @@ app.get('/api/analytics', admin, async (req,res) => {
   const dailyReading = await db.all(`
     SELECT date, SUM(secs_read) as secs, COUNT(DISTINCT session_id) as readers
     FROM reading_events
-    WHERE created_at>=strftime('%s','now','-14 days')
+    WHERE created_at>=(NOW() - INTERVAL 14 DAY)
     GROUP BY date ORDER BY date ASC
   `);
 

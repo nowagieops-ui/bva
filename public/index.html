@@ -690,6 +690,8 @@ html,body{
 .list-info span{font-size:11px;font-weight:700;color:var(--ink3)}
 .del-btn{font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:10px;font-family:var(--sans);font-weight:800}
 .del-btn:hover{background:var(--red-l)}
+.edit-btn{font-size:11px;color:var(--blue-dark);background:none;border:none;cursor:pointer;padding:5px 8px;border-radius:10px;font-family:var(--sans);font-weight:800;margin-right:4px}
+.edit-btn:hover{background:var(--blue-l)}
 
 .size-warn{font-size:12px;font-weight:700;color:var(--amber);background:var(--amber-l);border:2px solid #fcd34d;border-radius:12px;padding:8px 12px;margin-bottom:10px;display:none;line-height:1.5}
 .size-warn.show{display:block}
@@ -1017,6 +1019,7 @@ html,body{
       <div id="adminTab-books">
         <div class="admin-card">
           <div class="admin-card-title">Book library <span class="count-badge" id="bookCountBadge">0</span></div>
+          <input type="file" id="bookUpdateFileIn" accept=".txt,.epub,.pdf,.docx,.rtf" style="display:none" onchange="onBookUpdateFileChosen(this)">
           <div id="adminBookList"></div>
           <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
             <div style="font-size:13px;font-weight:600;margin-bottom:14px">Add a new book</div>
@@ -2099,7 +2102,7 @@ async function loadAdminBooks(){
   try{
     const r=await fetch(`${API}/api/books`);const books=await r.json();
     g('bookCountBadge').textContent=books.length+' book'+(books.length!==1?'s':'');
-    g('adminBookList').innerHTML=books.length?books.map((b,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${b.title}</p><span>${b.author||''} · ${b.total_episodes} episodes</span></div><button class="del-btn" onclick="deleteBook('${b.id}')">Delete</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No books yet.</p>';
+    g('adminBookList').innerHTML=books.length?books.map((b,i)=>`<div class="list-row"><div class="list-num">${i+1}</div><div class="list-info"><p>${b.title}</p><span>${b.author||''} · ${b.total_episodes} episodes</span></div><button class="edit-btn" onclick="triggerBookUpdate('${b.id}')">Update</button><button class="del-btn" onclick="deleteBook('${b.id}')">Delete</button></div>`).join(''):'<p style="font-size:13px;color:var(--text-3);padding:4px 0">No books yet.</p>';
   }catch(e){}
 }
 async function deleteBook(id){
@@ -2109,6 +2112,37 @@ async function deleteBook(id){
     loadAdminBooks();toast('Book deleted');
   } else {
     toast('Could not delete book');
+  }
+}
+
+// Re-upload a book's source file to rebuild its episodes in place — same book id,
+// so reader progress and purchases (which key off book id) stay linked.
+let updatingBookId=null;
+function triggerBookUpdate(id){
+  updatingBookId=id;
+  g('bookUpdateFileIn').click();
+}
+async function onBookUpdateFileChosen(inp){
+  const file=inp.files&&inp.files[0], id=updatingBookId;
+  if(!file||!id){inp.value='';updatingBookId=null;return;}
+  if(!confirm('Rebuild this book\'s episodes from the new file? Reader progress and purchases stay linked — only the episode content is replaced.')){
+    inp.value='';updatingBookId=null;return;
+  }
+  toast('Updating book...');
+  try{
+    const text=await readFileAsText(file);
+    const blob=new Blob([text],{type:'text/plain'});
+    const fd=new FormData();
+    fd.append('book',blob,'book.txt');
+    const r=await fetch(`${API}/api/books/${id}/update`,{method:'POST',headers:{'x-admin-pass':adminPass},body:fd});
+    const d=await r.json();
+    if(!r.ok||d.error){toast('Error: '+(d.error||'Update failed'));return;}
+    toast('"'+d.title+'" updated — '+d.totalEpisodes+' episodes');
+    loadAdminBooks();
+  }catch(e){
+    toast('Error: '+e.message);
+  }finally{
+    inp.value='';updatingBookId=null;
   }
 }
 
