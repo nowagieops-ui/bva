@@ -120,10 +120,14 @@ const SCHEMA = [
 ];
 
 async function initDB() {
-  // Node's default DNS lookup for 'localhost' can resolve to the IPv6
-  // loopback (::1), which then doesn't match a MySQL grant scoped to
-  // 'localhost'/127.0.0.1 — force IPv4 loopback explicitly to avoid that.
-  const dbHost = process.env.DB_HOST === 'localhost' ? '127.0.0.1' : process.env.DB_HOST;
+  // DB_HOST as a fallback chain: some hosting dashboards have proven flaky
+  // about persisting this specific key, so DB_HOST_ALT is a backup name to
+  // try if DB_HOST itself won't stick. Also, Node's default DNS lookup for
+  // 'localhost' can resolve to the IPv6 loopback (::1), which then doesn't
+  // match a MySQL grant scoped to 'localhost'/127.0.0.1 — force IPv4
+  // loopback explicitly to avoid that.
+  let dbHost = process.env.DB_HOST || process.env.DB_HOST_ALT;
+  if (dbHost === 'localhost') dbHost = '127.0.0.1';
   console.log('Connecting to MySQL at', dbHost);
   pool = await mysql.createPool({
     host:     dbHost,
